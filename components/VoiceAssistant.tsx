@@ -37,15 +37,41 @@ const ALLOWED_PATHS = [
   "/voice",
 ];
 
+/*
+ * ============================================================
+ * BACKEND BASE URL
+ *
+ * On web this can be empty.
+ *
+ * Inside the Capacitor iOS app, this must point to your
+ * deployed Next.js backend.
+ *
+ * Example:
+ *
+ * NEXT_PUBLIC_API_BASE_URL=https://your-app.vercel.app
+ * ============================================================
+ */
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "";
+
 export default function VoiceAssistant() {
   const router = useRouter();
 
-  const [connected, setConnected] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [listening, setListening] = useState(false);
-  const [error, setError] = useState("");
+  const [connected, setConnected] =
+    useState(false);
 
-  const [profile, setProfile] = useState<Profile>({});
+  const [connecting, setConnecting] =
+    useState(false);
+
+  const [listening, setListening] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  const [profile, setProfile] =
+    useState<Profile>({});
 
   const peerConnectionRef =
     useRef<RTCPeerConnection | null>(null);
@@ -105,20 +131,44 @@ export default function VoiceAssistant() {
    */
 
   async function createSession() {
-    const response =
-      await fetch("/api/realtime", {
-        method: "POST",
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-        body: JSON.stringify({
-          profile,
-        }),
-      });
+    console.log(
+      "Creating temporary Realtime session..."
+    );
 
-    const data =
-      await response.json();
+    const response =
+      await fetch(
+        `${API_BASE_URL}/api/realtime`,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          body: JSON.stringify({
+            profile,
+          }),
+        }
+      );
+
+    const rawText =
+      await response.text();
+
+    let data: any;
+
+    try {
+      data = JSON.parse(rawText);
+    } catch (parseError) {
+      console.error(
+        "Realtime session response was not JSON:",
+        rawText?.slice(0, 500)
+      );
+
+      throw new Error(
+        "Could not reach the voice server. Check that NEXT_PUBLIC_API_BASE_URL is set correctly."
+      );
+    }
 
     if (!response.ok) {
       throw new Error(
@@ -132,6 +182,10 @@ export default function VoiceAssistant() {
         "No Realtime client secret was returned."
       );
     }
+
+    console.log(
+      "Temporary Realtime session created."
+    );
 
     return data.client_secret;
   }
@@ -646,29 +700,68 @@ After navigation, keep helping the user.
     setError("");
     setConnecting(true);
 
+    console.log(
+      "===================================="
+    );
+
+    console.log(
+      "Starting Netherlands Guide Voice..."
+    );
+
+    console.log(
+      "===================================="
+    );
+
     try {
       /*
+       * ========================================================
        * MICROPHONE
+       * ========================================================
        */
+
+      console.log(
+        "Requesting microphone access..."
+      );
+
+      if (
+        !navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia
+      ) {
+        throw new Error(
+          "Microphone access is not available in this app."
+        );
+      }
 
       const stream =
         await navigator.mediaDevices.getUserMedia({
           audio: true,
         });
 
+      console.log(
+        "Microphone access granted."
+      );
+
       localStreamRef.current =
         stream;
 
       /*
+       * ========================================================
        * CREATE TEMPORARY REALTIME CREDENTIAL
+       * ========================================================
        */
 
       const clientSecret =
         await createSession();
 
       /*
+       * ========================================================
        * WEBRTC
+       * ========================================================
        */
+
+      console.log(
+        "Creating RTCPeerConnection..."
+      );
 
       const pc =
         new RTCPeerConnection();
@@ -677,43 +770,91 @@ After navigation, keep helping the user.
         pc;
 
       /*
+       * ========================================================
        * REMOTE AUDIO
+       *
+       * iOS / WKWebView compatibility
+       * ========================================================
        */
 
       const audio =
-        document.createElement(
-          "audio"
-        );
+        document.createElement("audio");
 
       audio.autoplay = true;
+
+      audio.setAttribute(
+        "playsinline",
+        "true"
+      );
 
       audioElementRef.current =
         audio;
 
+      document.body.appendChild(
+        audio
+      );
+
+      console.log(
+        "iOS-compatible audio element created."
+      );
+
+      /*
+       * ========================================================
+       * REMOTE AUDIO TRACK
+       * ========================================================
+       */
+
       pc.ontrack = (event) => {
+        console.log(
+          "Remote audio track received."
+        );
+
         const remoteStream =
           event.streams[0];
+
+        if (!remoteStream) {
+          console.error(
+            "No remote stream received."
+          );
+
+          return;
+        }
 
         audio.srcObject =
           remoteStream;
 
-        audio.play().catch(
-          (error) => {
-            console.warn(
-              "Remote audio autoplay issue:",
-              error
+        audio
+          .play()
+          .then(() => {
+            console.log(
+              "Remote audio playback started."
             );
-          }
-        );
+          })
+          .catch(
+            (error) => {
+              console.warn(
+                "Remote audio autoplay issue:",
+                error
+              );
+            }
+          );
       };
 
       /*
-       * MICROPHONE
+       * ========================================================
+       * MICROPHONE TRACK
+       * ========================================================
        */
 
       stream
         .getTracks()
         .forEach((track) => {
+          console.log(
+            "Adding microphone track:",
+            track.kind,
+            track.enabled
+          );
+
           pc.addTrack(
             track,
             stream
@@ -721,8 +862,14 @@ After navigation, keep helping the user.
         });
 
       /*
+       * ========================================================
        * DATA CHANNEL
+       * ========================================================
        */
+
+      console.log(
+        "Creating data channel..."
+      );
 
       const dc =
         pc.createDataChannel(
@@ -740,7 +887,7 @@ After navigation, keep helping the user.
 
       dc.onopen = () => {
         console.log(
-          "Realtime data channel OPEN"
+          "Realtime data channel OPEN."
         );
 
         setConnected(true);
@@ -752,10 +899,12 @@ After navigation, keep helping the user.
 
         dc.send(
           JSON.stringify({
-            type: "session.update",
+            type:
+              "session.update",
 
             session: {
-              type: "realtime",
+              type:
+                "realtime",
 
               instructions:
                 buildInstructions(),
@@ -764,15 +913,21 @@ After navigation, keep helping the user.
                 navigationTool,
               ],
 
-              tool_choice: "auto",
+              tool_choice:
+                "auto",
 
               audio: {
                 output: {
-                  voice: "marin",
+                  voice:
+                    "marin",
                 },
               },
             },
           })
+        );
+
+        console.log(
+          "Realtime session configured."
         );
 
         /*
@@ -812,7 +967,10 @@ After navigation, keep helping the user.
 
                   response: {
                     instructions:
-                      `Give a very short friendly greeting in ${profile.language || "English"}.
+                      `Give a very short friendly greeting in ${
+                        profile.language ||
+                        "English"
+                      }.
 Do not say "How can I assist you today?"
 Say something natural like:
 "Hi! I'm here. What do you need help with?"`,
@@ -840,6 +998,31 @@ Say something natural like:
 
       /*
        * ========================================================
+       * DATA CHANNEL ERROR
+       * ========================================================
+       */
+
+      dc.onerror = (event) => {
+        console.error(
+          "Realtime data channel error:",
+          event
+        );
+      };
+
+      /*
+       * ========================================================
+       * DATA CHANNEL CLOSE
+       * ========================================================
+       */
+
+      dc.onclose = () => {
+        console.log(
+          "Realtime data channel CLOSED."
+        );
+      };
+
+      /*
+       * ========================================================
        * WEBRTC CONNECTION STATE
        * ========================================================
        */
@@ -847,7 +1030,7 @@ Say something natural like:
       pc.onconnectionstatechange =
         () => {
           console.log(
-            "WebRTC connection:",
+            "WebRTC connection state:",
             pc.connectionState
           );
 
@@ -865,6 +1048,11 @@ Say something natural like:
             pc.connectionState ===
               "disconnected"
           ) {
+            console.error(
+              "WebRTC connection failed/disconnected:",
+              pc.connectionState
+            );
+
             setConnected(false);
             setConnecting(false);
           }
@@ -876,6 +1064,20 @@ Say something natural like:
             setConnected(false);
             setConnecting(false);
           }
+        };
+
+      /*
+       * ========================================================
+       * ICE CONNECTION STATE
+       * ========================================================
+       */
+
+      pc.oniceconnectionstatechange =
+        () => {
+          console.log(
+            "ICE connection state:",
+            pc.iceConnectionState
+          );
         };
 
       /*
@@ -898,11 +1100,6 @@ Say something natural like:
 
           /*
            * USER STARTED SPEAKING
-           *
-           * IMPORTANT:
-           * DO NOT PAUSE AUDIO HERE.
-           *
-           * Realtime handles interruption.
            */
 
           if (
@@ -910,7 +1107,7 @@ Say something natural like:
             "input_audio_buffer.speech_started"
           ) {
             console.log(
-              "User started speaking"
+              "User started speaking."
             );
 
             setListening(true);
@@ -925,7 +1122,7 @@ Say something natural like:
             "input_audio_buffer.speech_stopped"
           ) {
             console.log(
-              "User stopped speaking"
+              "User stopped speaking."
             );
 
             setListening(false);
@@ -975,7 +1172,7 @@ Say something natural like:
             "error"
           ) {
             console.error(
-              "Realtime error:",
+              "Realtime server error:",
               message
             );
 
@@ -1003,18 +1200,34 @@ Say something natural like:
        * ========================================================
        */
 
+      console.log(
+        "Creating WebRTC offer..."
+      );
+
       const offer =
         await pc.createOffer();
+
+      console.log(
+        "WebRTC offer created."
+      );
 
       await pc.setLocalDescription(
         offer
       );
 
+      console.log(
+        "Local description set."
+      );
+
       /*
        * ========================================================
-       * CONNECT TO REALTIME
+       * CONNECT TO OPENAI REALTIME
        * ========================================================
        */
+
+      console.log(
+        "Connecting to OpenAI Realtime..."
+      );
 
       const response =
         await fetch(
@@ -1041,6 +1254,12 @@ Say something natural like:
         const text =
           await response.text();
 
+        console.error(
+          "OpenAI Realtime HTTP error:",
+          response.status,
+          text
+        );
+
         throw new Error(
           text ||
             "Could not connect to OpenAI Realtime."
@@ -1050,34 +1269,125 @@ Say something natural like:
       const answer =
         await response.text();
 
-      /*
-       * SET REMOTE DESCRIPTION
-       */
+      console.log(
+        "OpenAI SDP answer received."
+      );
 
-      await pc.setRemoteDescription(
-        {
-          type: "answer",
-          sdp: answer,
-        }
+      console.log(
+        "SDP answer length:",
+        answer?.length
       );
 
       /*
-       * IMPORTANT:
-       * Do not wait for anything else.
+       * ========================================================
+       * SET REMOTE DESCRIPTION
+       * ========================================================
+       */
+
+      console.log(
+        "Setting remote WebRTC description..."
+      );
+
+      try {
+        await pc.setRemoteDescription({
+          type: "answer",
+          sdp: answer,
+        });
+
+        console.log(
+          "REMOTE DESCRIPTION SET SUCCESSFULLY."
+        );
+      } catch (
+        error
+      ) {
+        console.error(
+          "===================================="
+        );
+
+        console.error(
+          "REMOTE DESCRIPTION FAILED"
+        );
+
+        console.error(
+          "===================================="
+        );
+
+        console.error(
+          "Error:",
+          error
+        );
+
+        console.error(
+          "Error name:",
+          (error as any)?.name
+        );
+
+        console.error(
+          "Error message:",
+          (error as any)?.message
+        );
+
+        console.error(
+          "SDP answer length:",
+          answer?.length
+        );
+
+        console.error(
+          "SDP answer beginning:",
+          answer?.slice(0, 1000)
+        );
+
+        throw error;
+      }
+
+      /*
+       * ========================================================
+       * CONNECTION READY
+       * ========================================================
        */
 
       setConnected(true);
       setConnecting(false);
 
       console.log(
-        "Netherlands Guide voice is ready."
+        "===================================="
+      );
+
+      console.log(
+        "Netherlands Guide voice is READY."
+      );
+
+      console.log(
+        "===================================="
       );
     } catch (
       error: any
     ) {
       console.error(
-        "Voice connection error:",
+        "===================================="
+      );
+
+      console.error(
+        "VOICE CONNECTION ERROR"
+      );
+
+      console.error(
+        "===================================="
+      );
+
+      console.error(
+        "Error:",
         error
+      );
+
+      console.error(
+        "Error name:",
+        error?.name
+      );
+
+      console.error(
+        "Error message:",
+        error?.message
       );
 
       setError(
@@ -1140,6 +1450,7 @@ Say something natural like:
         call_id,
         {
           success: false,
+
           error:
             "Invalid navigation arguments.",
         }
@@ -1162,6 +1473,7 @@ Say something natural like:
         call_id,
         {
           success: false,
+
           error:
             "That page is not available.",
         }
@@ -1175,24 +1487,18 @@ Say something natural like:
       args.path
     );
 
-    /*
-     * ACTUAL NEXT.JS NAVIGATION
-     */
-
     router.push(
       args.path
     );
-
-    /*
-     * Tell the model the navigation succeeded.
-     */
 
     sendFunctionResult(
       call_id,
       {
         success: true,
+
         navigated_to:
           args.path,
+
         message:
           "The requested page is now open. Continue helping the user naturally.",
       }
@@ -1225,10 +1531,6 @@ Say something natural like:
     }
 
     try {
-      /*
-       * Send function output.
-       */
-
       dc.send(
         JSON.stringify({
           type:
@@ -1248,10 +1550,6 @@ Say something natural like:
           },
         })
       );
-
-      /*
-       * Ask assistant to continue.
-       */
 
       dc.send(
         JSON.stringify({
@@ -1276,6 +1574,10 @@ Say something natural like:
    */
 
   function disconnect() {
+    console.log(
+      "Disconnecting voice assistant..."
+    );
+
     try {
       dataChannelRef.current?.close();
     } catch {}
@@ -1297,10 +1599,16 @@ Say something natural like:
     if (
       audioElementRef.current
     ) {
-      audioElementRef.current.pause();
+      try {
+        audioElementRef.current.pause();
+      } catch {}
 
       audioElementRef.current.srcObject =
         null;
+
+      try {
+        audioElementRef.current.remove();
+      } catch {}
     }
 
     dataChannelRef.current =
@@ -1327,8 +1635,13 @@ Say something natural like:
    */
 
   function handleMicClick() {
+    console.log(
+      "Microphone button clicked."
+    );
+
     if (connected) {
       disconnect();
+
       return;
     }
 
