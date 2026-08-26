@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+android
+ios
+out
+*.zip
+.env*
+.DS_Store

@@ -1,4 +1,3 @@
-import OpenAI from "openai";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -21,6 +20,7 @@ export async function POST(request: Request) {
     const formData = await request.formData();
 
     const image = formData.get("image");
+
     const language = String(
       formData.get("language") || "English"
     );
@@ -28,7 +28,18 @@ export async function POST(request: Request) {
     if (!(image instanceof File)) {
       return NextResponse.json(
         {
-          error: "Please upload an image.",
+          error: 'No image received. Send the file using the field "image".',
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (!image.type.startsWith("image/")) {
+      return NextResponse.json(
+        {
+          error: "Please upload an image such as JPG, JPEG, PNG, or HEIC.",
         },
         {
           status: 400,
@@ -38,86 +49,140 @@ export async function POST(request: Request) {
 
     const bytes = await image.arrayBuffer();
 
-    const base64 = Buffer.from(
-      bytes
-    ).toString("base64");
+    const base64 = Buffer.from(bytes).toString("base64");
 
-    const mimeType =
-      image.type || "image/jpeg";
+    const mimeType = image.type || "image/jpeg";
 
-    const imageUrl = `data:${mimeType};base64,${base64}`;
+    const imageUrl =
+      "data:" + mimeType + ";base64," + base64;
 
-    const openai = new OpenAI({
-      apiKey,
-    });
+    const openAIResponse = await fetch(
+      "https://api.openai.com/v1/responses",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + apiKey,
+        },
+        body: JSON.stringify({
+          model: "gpt-4.1-mini",
+          input: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text:
+                    "You are Netherlands Guide AI.\n\n" +
+                    "The user uploaded an official Dutch letter.\n\n" +
+                    "Read the letter carefully and explain it in " +
+                    language +
+                    " using very simple language.\n\n" +
+                    "Explain:\n\n" +
+                    "1. Who sent the letter\n" +
+                    "2. What the letter is about\n" +
+                    "3. What the user needs to do\n" +
+                    "4. Important deadlines\n" +
+                    "5. Payments or amounts\n" +
+                    "6. Appointments\n" +
+                    "7. Documents needed\n" +
+                    "8. What happens if the user does nothing\n" +
+                    "9. A short summary\n\n" +
+                    "IMPORTANT:\n" +
+                    "- Do not invent information.\n" +
+                    "- Only use information visible in the letter.\n" +
+                    "- Keep dates and amounts accurate.\n" +
+                    "- If something cannot be read, say that it is unclear.\n" +
+                    "- Do not give legal advice.",
+                },
+                {
+                  type: "input_image",
+                  image_url: imageUrl,
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    );
 
-    const response =
-      await openai.responses.create({
-        model: "gpt-4.1-mini",
+    const responseText = await openAIResponse.text();
 
-        input: [
-          {
-            role: "user",
+    if (!openAIResponse.ok) {
+      console.error(
+        "OpenAI API error:",
+        responseText
+      );
 
-            content: [
-              {
-                type: "input_text",
+      return NextResponse.json(
+        {
+          error:
+            "OpenAI error: " + responseText,
+        },
+        {
+          status: openAIResponse.status,
+        }
+      );
+    }
 
-                text: `You are Netherlands Guide AI.
+    const data = JSON.parse(responseText);
 
-The user uploaded a letter.
+    let reply = "";
 
-Explain this letter in ${language}.
+    if (
+      typeof data.output_text === "string"
+    ) {
+      reply = data.output_text;
+    }
 
-Use simple and easy language.
+    if (!reply && Array.isArray(data.output)) {
+      for (const item of data.output) {
+        if (
+          Array.isArray(item.content)
+        ) {
+          for (const content of item.content) {
+            if (
+              typeof content.text === "string"
+            ) {
+              reply += content.text;
+            }
+          }
+        }
+      }
+    }
 
-Clearly explain:
+    if (!reply) {
+      console.error(
+        "No text returned by OpenAI:",
+        data
+      );
 
-1. Who sent the letter
-2. What the letter is about
-3. What the user needs to do
-4. Any important deadline
-5. Any payment or amount mentioned
-6. Any appointment mentioned
-7. Any documents needed
-8. What may happen if the user does nothing
-9. A short summary
-
-Do not invent information.
-
-If the image or text is unclear, say exactly what is unclear.`,
-
-              },
-
-              {
-                type: "input_image",
-
-                image_url: imageUrl,
-
-                detail: "high",
-              },
-            ],
-          },
-        ],
-      });
+      return NextResponse.json(
+        {
+          error: "AI returned no explanation.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-
-      reply: response.output_text,
+      reply: reply,
     });
-
   } catch (error) {
-
     console.error(
-      "Letter scanning error:",
+      "SCAN LETTER ERROR:",
       error
     );
 
     return NextResponse.json(
       {
         error:
-          "Could not analyse the letter.",
+          error instanceof Error
+            ? error.message
+            : "Could not analyse the letter.",
       },
       {
         status: 500,

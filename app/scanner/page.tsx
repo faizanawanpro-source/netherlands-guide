@@ -49,7 +49,13 @@ export default function ScannerPage() {
 
     try {
       const formData = new FormData();
-      formData.append("file", file);
+
+      // IMPORTANT:
+      // The API expects "image"
+      formData.append("image", file);
+
+      // Optional language
+      formData.append("language", "English");
 
       const response = await fetch("/api/scan-letter", {
         method: "POST",
@@ -58,23 +64,30 @@ export default function ScannerPage() {
 
       const data = await response.json();
 
+      console.log("Scanner API response:", data);
+
       if (!response.ok) {
         throw new Error(
-          data.error || "Scanning is currently unavailable."
+          data.error || `Scanner API failed (${response.status})`
         );
       }
 
-      setResult(
-        data.text ||
-          data.result ||
-          "The letter was successfully uploaded."
-      );
+      if (!data.reply) {
+        throw new Error(
+          "The AI responded, but no explanation was returned."
+        );
+      }
+
+      setResult(data.reply);
     } catch (err) {
       console.error("Scanner error:", err);
 
-      setResult(
-        "Your letter has been uploaded. AI letter analysis will be available when the AI service is connected."
-      );
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Unknown scanner error.";
+
+      setError(message);
     } finally {
       setScanning(false);
     }
@@ -98,8 +111,6 @@ export default function ScannerPage() {
 
       <nav className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-5xl items-center px-5 py-4">
-
-          {/* HOME ON LEFT */}
 
           <Link
             href="/dashboard"
@@ -151,6 +162,7 @@ export default function ScannerPage() {
             ref={inputRef}
             type="file"
             accept="image/*,.pdf"
+            capture="environment"
             onChange={handleFileChange}
             className="hidden"
           />
@@ -260,7 +272,7 @@ export default function ScannerPage() {
                   className="rounded-xl bg-purple-600 px-5 py-4 font-black text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {scanning
-                    ? "🔄 Processing..."
+                    ? "🔄 AI is reading..."
                     : "🤖 Scan with AI"}
                 </button>
 
@@ -277,7 +289,13 @@ export default function ScannerPage() {
         {error && (
 
           <section className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-bold text-red-700">
-            ⚠️ {error}
+
+            ⚠️ Scanner error:
+
+            <p className="mt-2 font-medium">
+              {error}
+            </p>
+
           </section>
 
         )}
@@ -387,9 +405,10 @@ export default function ScannerPage() {
 
         <div className="mt-8 rounded-2xl bg-slate-100 p-5 text-center text-xs leading-5 text-slate-500">
 
-          AI letter analysis will work once the AI service is
-          connected. For important legal, immigration, financial
-          or healthcare letters, always check the official source.
+          AI explanations are provided for general understanding.
+          For important legal, immigration, financial or healthcare
+          letters, always verify the information with the official
+          organization.
 
         </div>
 

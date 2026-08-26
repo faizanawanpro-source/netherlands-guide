@@ -17,26 +17,6 @@ type AIResponse = {
   error?: string;
 };
 
-const PAGE_ROUTES: Record<string, string> = {
-  transport: "/transport",
-  documents: "/documents",
-  healthcare: "/healthcare",
-  housing: "/housing",
-  money: "/money",
-  work: "/work",
-  study: "/study",
-  municipality: "/municipality",
-  vehicles: "/vehicles",
-  waste: "/waste",
-  phone: "/dutch-phone-number",
-  trip: "/trip-planner",
-  planner: "/plan-day",
-  scanner: "/scanner",
-  budget: "/budget-planner",
-  explore: "/explore",
-  help: "/what-do-i-do",
-};
-
 export default function VoicePage() {
   const router = useRouter();
 
@@ -61,13 +41,15 @@ export default function VoicePage() {
 
   useEffect(() => {
     try {
-      const saved =
+      const savedProfile =
         localStorage.getItem(
           "netherlandsGuideProfile"
         );
 
-      if (saved) {
-        setProfile(JSON.parse(saved));
+      if (savedProfile) {
+        setProfile(
+          JSON.parse(savedProfile)
+        );
       }
     } catch (error) {
       console.error(
@@ -83,6 +65,16 @@ export default function VoicePage() {
 
   useEffect(() => {
     return () => {
+      /*
+       * IMPORTANT:
+       * Do NOT cancel speech here.
+       *
+       * Next.js client-side navigation unmounts this page.
+       * speechSynthesis belongs to the browser window, so we
+       * intentionally allow the current AI response to continue
+       * speaking while the next page loads.
+       */
+
       const recorder =
         mediaRecorderRef.current;
 
@@ -98,7 +90,7 @@ export default function VoicePage() {
   }, []);
 
   // ============================================================
-  // SPEECH LANGUAGE
+  // LANGUAGE
   // ============================================================
 
   function getSpeechLanguage(
@@ -139,7 +131,7 @@ export default function VoicePage() {
   }
 
   // ============================================================
-  // FIND VOICE
+  // FIND BEST VOICE
   // ============================================================
 
   function findVoice(
@@ -159,35 +151,37 @@ export default function VoicePage() {
       return null;
     }
 
-    const wanted =
-      getSpeechLanguage(language)
-        .toLowerCase();
+    const speechLanguage =
+      getSpeechLanguage(language);
 
     const exact =
       voices.find(
         (voice) =>
           voice.lang.toLowerCase() ===
-          wanted
+          speechLanguage.toLowerCase()
       );
 
     if (exact) {
       return exact;
     }
 
-    const prefix =
-      wanted.split("-")[0];
+    const languagePrefix =
+      speechLanguage
+        .split("-")[0]
+        .toLowerCase();
 
-    return (
+    const matching =
       voices.find((voice) =>
         voice.lang
           .toLowerCase()
-          .startsWith(prefix)
-      ) || null
-    );
+          .startsWith(languagePrefix)
+      );
+
+    return matching || null;
   }
 
   // ============================================================
-  // SPEAK
+  // SPEAK REPLY
   // ============================================================
 
   function speakReply(text: string) {
@@ -210,18 +204,27 @@ export default function VoicePage() {
           text
         );
 
-      utterance.lang =
+      const language =
         getSpeechLanguage(
           profile.language
         );
 
-      const voice =
-        findVoice(profile.language);
+      utterance.lang = language;
+
+      const voice = findVoice(
+        profile.language
+      );
 
       if (voice) {
         utterance.voice = voice;
       }
 
+      /*
+       * Keep the old natural voice behaviour.
+       *
+       * These values are intentionally conservative
+       * so the voice does not sound rushed or distorted.
+       */
       utterance.rate = 0.95;
       utterance.pitch = 1;
       utterance.volume = 1;
@@ -230,7 +233,7 @@ export default function VoicePage() {
         setSpeaking(true);
 
         console.log(
-          "AI started speaking"
+          "AI started speaking."
         );
       };
 
@@ -238,7 +241,7 @@ export default function VoicePage() {
         setSpeaking(false);
 
         console.log(
-          "AI finished speaking"
+          "AI finished speaking."
         );
       };
 
@@ -248,7 +251,7 @@ export default function VoicePage() {
         setSpeaking(false);
 
         console.error(
-          "Speech error:",
+          "Speech synthesis error:",
           event
         );
       };
@@ -257,457 +260,11 @@ export default function VoicePage() {
         utterance
       );
     } catch (error) {
-      console.error(
-        "Speech failed:",
-        error
-      );
-
       setSpeaking(false);
-    }
-  }
 
-  // ============================================================
-  // FIND DESTINATION FROM USER'S WORDS
-  //
-  // THIS IS THE IMPORTANT PART.
-  //
-  // The app does NOT depend on the AI deciding whether
-  // navigation should happen.
-  // ============================================================
-
-  function getDestinationFromText(
-    text: string
-  ): string | null {
-    const message =
-      text.toLowerCase().trim();
-
-    // ----------------------------------------------------------
-    // TRANSPORT
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "public transport"
-      ) ||
-      message.includes(
-        "public transportation"
-      ) ||
-      message.includes(
-        "ov-chipkaart"
-      ) ||
-      message.includes(
-        "ov chipkaart"
-      ) ||
-      message.includes("train") ||
-      message.includes("bus") ||
-      message.includes("tram") ||
-      message.includes("metro") ||
-      message.includes("ns train") ||
-      message.includes("ns") ||
-      message.includes("transport") ||
-      message.includes("travel") ||
-      message.includes("journey") ||
-      message.includes("ticket")
-    ) {
-      return PAGE_ROUTES.transport;
-    }
-
-    // ----------------------------------------------------------
-    // DOCUMENTS
-    // ----------------------------------------------------------
-
-    if (
-      message.includes("document") ||
-      message.includes("documents") ||
-      message.includes("bsn") ||
-      message.includes("digid") ||
-      message.includes("digi d") ||
-      message.includes(
-        "residence permit"
-      ) ||
-      message.includes(
-        "residence card"
-      ) ||
-      message.includes(
-        "official letter"
-      ) ||
-      message.includes(
-        "government letter"
-      ) ||
-      message.includes(
-        "government document"
-      )
-    ) {
-      return PAGE_ROUTES.documents;
-    }
-
-    // ----------------------------------------------------------
-    // HEALTHCARE
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "healthcare"
-      ) ||
-      message.includes(
-        "health care"
-      ) ||
-      message.includes(
-        "health insurance"
-      ) ||
-      message.includes(
-        "medical"
-      ) ||
-      message.includes(
-        "doctor"
-      ) ||
-      message.includes(
-        "huisarts"
-      ) ||
-      message.includes(
-        "hospital"
-      ) ||
-      message.includes(
-        "dentist"
-      )
-    ) {
-      return PAGE_ROUTES.healthcare;
-    }
-
-    // ----------------------------------------------------------
-    // HOUSING
-    // ----------------------------------------------------------
-
-    if (
-      message.includes("housing") ||
-      message.includes(
-        "apartment"
-      ) ||
-      message.includes(
-        "rental"
-      ) ||
-      message.includes(
-        "renting"
-      ) ||
-      message.includes(
-        "rent a house"
-      ) ||
-      message.includes(
-        "find a house"
-      ) ||
-      message.includes(
-        "find a room"
-      ) ||
-      message.includes(
-        "room to rent"
-      )
-    ) {
-      return PAGE_ROUTES.housing;
-    }
-
-    // ----------------------------------------------------------
-    // MONEY
-    // ----------------------------------------------------------
-
-    if (
-      message.includes("money") ||
-      message.includes("bank") ||
-      message.includes(
-        "banking"
-      ) ||
-      message.includes(
-        "tax"
-      ) ||
-      message.includes(
-        "belasting"
-      ) ||
-      message.includes(
-        "salary"
-      ) ||
-      message.includes(
-        "payment"
-      )
-    ) {
-      return PAGE_ROUTES.money;
-    }
-
-    // ----------------------------------------------------------
-    // MUNICIPALITY
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "municipality"
-      ) ||
-      message.includes(
-        "gemeente"
-      ) ||
-      message.includes(
-        "town hall"
-      ) ||
-      message.includes(
-        "register with municipality"
-      ) ||
-      message.includes(
-        "registration at gemeente"
-      )
-    ) {
-      return PAGE_ROUTES.municipality;
-    }
-
-    // ----------------------------------------------------------
-    // WORK
-    // ----------------------------------------------------------
-
-    if (
-      message.includes("job") ||
-      message.includes("jobs") ||
-      message.includes("work") ||
-      message.includes(
-        "employment"
-      ) ||
-      message.includes(
-        "employer"
-      ) ||
-      message.includes(
-        "working"
-      ) ||
-      message.includes(
-        "find a job"
-      )
-    ) {
-      return PAGE_ROUTES.work;
-    }
-
-    // ----------------------------------------------------------
-    // STUDY
-    // ----------------------------------------------------------
-
-    if (
-      message.includes("study") ||
-      message.includes("school") ||
-      message.includes("student") ||
-      message.includes(
-        "education"
-      ) ||
-      message.includes("course") ||
-      message.includes(
-        "university"
-      ) ||
-      message.includes("mbo") ||
-      message.includes("hbo")
-    ) {
-      return PAGE_ROUTES.study;
-    }
-
-    // ----------------------------------------------------------
-    // WASTE
-    // ----------------------------------------------------------
-
-    if (
-      message.includes("waste") ||
-      message.includes(
-        "garbage"
-      ) ||
-      message.includes(
-        "trash"
-      ) ||
-      message.includes(
-        "recycling"
-      ) ||
-      message.includes(
-        "recycle"
-      )
-    ) {
-      return PAGE_ROUTES.waste;
-    }
-
-    // ----------------------------------------------------------
-    // VEHICLES
-    // ----------------------------------------------------------
-
-    if (
-      message.includes("vehicle") ||
-      message.includes("car") ||
-      message.includes(
-        "driving"
-      ) ||
-      message.includes(
-        "driving license"
-      ) ||
-      message.includes(
-        "driving licence"
-      ) ||
-      message.includes(
-        "parking"
-      )
-    ) {
-      return PAGE_ROUTES.vehicles;
-    }
-
-    // ----------------------------------------------------------
-    // DUTCH PHONE
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "phone number"
-      ) ||
-      message.includes(
-        "dutch phone"
-      ) ||
-      message.includes(
-        "sim card"
-      ) ||
-      message.includes(
-        "simcard"
-      ) ||
-      message.includes(
-        "dutch sim"
-      )
-    ) {
-      return PAGE_ROUTES.phone;
-    }
-
-    // ----------------------------------------------------------
-    // TRIP
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "trip planner"
-      ) ||
-      message.includes(
-        "plan a trip"
-      ) ||
-      message.includes(
-        "plan my trip"
-      ) ||
-      message.includes(
-        "itinerary"
-      )
-    ) {
-      return PAGE_ROUTES.trip;
-    }
-
-    // ----------------------------------------------------------
-    // DAY PLANNER
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "plan my day"
-      ) ||
-      message.includes(
-        "day planner"
-      ) ||
-      message.includes(
-        "what should i do today"
-      )
-    ) {
-      return PAGE_ROUTES.planner;
-    }
-
-    // ----------------------------------------------------------
-    // SCANNER
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "scan a letter"
-      ) ||
-      message.includes(
-        "scan this letter"
-      ) ||
-      message.includes(
-        "scanner"
-      )
-    ) {
-      return PAGE_ROUTES.scanner;
-    }
-
-    // ----------------------------------------------------------
-    // BUDGET
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "budget"
-      ) ||
-      message.includes(
-        "expenses"
-      ) ||
-      message.includes(
-        "spending"
-      )
-    ) {
-      return PAGE_ROUTES.budget;
-    }
-
-    // ----------------------------------------------------------
-    // DAILY HELP
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "what do i do"
-      ) ||
-      message.includes(
-        "what should i do"
-      )
-    ) {
-      return PAGE_ROUTES.help;
-    }
-
-    return null;
-  }
-
-  // ============================================================
-  // NAVIGATE
-  // ============================================================
-
-  function navigateTo(
-    destination: string
-  ) {
-    if (
-      !destination ||
-      !destination.startsWith("/")
-    ) {
-      return;
-    }
-
-    console.log(
-      "NAVIGATING TO:",
-      destination
-    );
-
-    try {
-      /*
-       * Next.js navigation.
-       *
-       * This is the correct navigation method for
-       * pages inside the Next.js app.
-       */
-
-      router.push(destination);
-
-      /*
-       * Refresh the router so the new page is rendered.
-       */
-
-      router.refresh();
-    } catch (error) {
       console.error(
-        "Router navigation failed:",
+        "Could not speak response:",
         error
-      );
-
-      /*
-       * Last-resort navigation.
-       */
-
-      window.location.assign(
-        destination
       );
     }
   }
@@ -724,9 +281,10 @@ export default function VoicePage() {
 
     try {
       if (
+        typeof navigator ===
+          "undefined" ||
         !navigator.mediaDevices ||
-        !navigator.mediaDevices
-          .getUserMedia
+        !navigator.mediaDevices.getUserMedia
       ) {
         throw new Error(
           "Microphone access is not available on this device."
@@ -742,6 +300,10 @@ export default function VoicePage() {
         );
       }
 
+      console.log(
+        "Requesting microphone permission..."
+      );
+
       const stream =
         await navigator.mediaDevices.getUserMedia(
           {
@@ -752,6 +314,10 @@ export default function VoicePage() {
             },
           }
         );
+
+      console.log(
+        "Microphone permission granted."
+      );
 
       let mimeType = "";
 
@@ -774,15 +340,16 @@ export default function VoicePage() {
         }
       }
 
-      const recorder =
-        mimeType
-          ? new MediaRecorder(
-              stream,
-              { mimeType }
-            )
-          : new MediaRecorder(
-              stream
-            );
+      const recorder = mimeType
+        ? new MediaRecorder(
+            stream,
+            {
+              mimeType,
+            }
+          )
+        : new MediaRecorder(
+            stream
+          );
 
       mediaRecorderRef.current =
         recorder;
@@ -806,7 +373,7 @@ export default function VoicePage() {
         event
       ) => {
         console.error(
-          "Recorder error:",
+          "MediaRecorder error:",
           event
         );
 
@@ -817,7 +384,6 @@ export default function VoicePage() {
           );
 
         setRecording(false);
-        setProcessing(false);
 
         setError(
           "There was a problem recording your voice."
@@ -825,6 +391,10 @@ export default function VoicePage() {
       };
 
       recorder.onstop = async () => {
+        console.log(
+          "Recording stopped."
+        );
+
         stream
           .getTracks()
           .forEach((track) =>
@@ -844,16 +414,25 @@ export default function VoicePage() {
             }
           );
 
+        console.log(
+          "Audio type:",
+          actualType
+        );
+
+        console.log(
+          "Audio size:",
+          audioBlob.size
+        );
+
         mediaRecorderRef.current =
           null;
 
         if (audioBlob.size === 0) {
-          setProcessing(false);
-
           setError(
             "No audio was recorded. Please try again."
           );
 
+          setProcessing(false);
           return;
         }
 
@@ -902,6 +481,10 @@ export default function VoicePage() {
       recorder.state ===
       "recording"
     ) {
+      console.log(
+        "Stopping recording..."
+      );
+
       setRecording(false);
       setProcessing(true);
 
@@ -910,7 +493,7 @@ export default function VoicePage() {
   }
 
   // ============================================================
-  // TRANSCRIBE
+  // TRANSCRIBE AUDIO
   // ============================================================
 
   async function transcribeAudio(
@@ -946,6 +529,10 @@ export default function VoicePage() {
         audioFile
       );
 
+      console.log(
+        "Sending audio to transcription..."
+      );
+
       const response =
         await fetch(
           "/api/transcribe",
@@ -957,6 +544,11 @@ export default function VoicePage() {
 
       const data =
         await response.json();
+
+      console.log(
+        "Transcription response:",
+        data
+      );
 
       if (!response.ok) {
         throw new Error(
@@ -977,7 +569,7 @@ export default function VoicePage() {
       setTranscript(text);
 
       console.log(
-        "TRANSCRIPT:",
+        "Transcript:",
         text
       );
 
@@ -988,13 +580,13 @@ export default function VoicePage() {
         error
       );
 
-      setProcessing(false);
-
       setError(
         error instanceof Error
           ? error.message
           : "Could not understand your voice."
       );
+
+      setProcessing(false);
     }
   }
 
@@ -1008,21 +600,6 @@ export default function VoicePage() {
     try {
       setProcessing(true);
       setError("");
-
-      /*
-       * FIRST:
-       * Determine the page from the user's actual words.
-       *
-       * This is the most reliable navigation decision.
-       */
-
-      const userDestination =
-        getDestinationFromText(text);
-
-      console.log(
-        "USER DESTINATION:",
-        userDestination
-      );
 
       const response =
         await fetch(
@@ -1047,7 +624,7 @@ export default function VoicePage() {
         await response.json();
 
       console.log(
-        "AI RESPONSE:",
+        "AI response:",
         data
       );
 
@@ -1058,7 +635,7 @@ export default function VoicePage() {
         );
       }
 
-      let aiReply =
+      const aiReply =
         data.reply?.trim();
 
       if (!aiReply) {
@@ -1067,85 +644,32 @@ export default function VoicePage() {
         );
       }
 
-      /*
-       * IMPORTANT:
-       *
-       * If the AI says something like:
-       *
-       * "I can't open buttons..."
-       *
-       * but WE KNOW the user asked about a page,
-       * replace that useless response with something
-       * natural.
-       */
-
-      const cannotNavigate =
-        /can't (open|press|click|navigate)|cannot (open|press|click|navigate)|can't access|cannot access|can't open icons|cannot open icons/i.test(
-          aiReply
-        );
-
-      if (
-        userDestination &&
-        cannotNavigate
-      ) {
-        aiReply =
-          "Absolutely. Let me take you there.";
-      }
-
       setReply(aiReply);
-
-      /*
-       * IMPORTANT:
-       *
-       * USER DESTINATION gets priority.
-       *
-       * This means:
-       *
-       * "I need help with public transport"
-       *
-       * ALWAYS goes to:
-       *
-       * /transport
-       *
-       * even if the AI accidentally returns NONE.
-       */
-
-      const destination =
-        userDestination ||
-        (data.destination &&
-        data.destination.startsWith("/")
-          ? data.destination
-          : null);
-
-      console.log(
-        "FINAL DESTINATION:",
-        destination
-      );
 
       setProcessing(false);
 
       /*
-       * START SPEAKING FIRST.
+       * Speak first.
+       *
+       * Navigation happens afterwards so
+       * the user can actually hear the answer.
        */
-
       speakReply(aiReply);
 
-      /*
-       * THEN NAVIGATE.
-       *
-       * 900ms gives iPhone enough time to start
-       * the speech before the page changes.
-       */
-
-      if (destination) {
-        setTimeout(() => {
-          console.log(
-            "EXECUTING NAVIGATION:",
-            destination
-          );
-
-          navigateTo(destination);
-        }, 900);
+      if (
+        data.destination &&
+        data.destination.startsWith("/")
+      ) {
+        /*
+         * Navigate after starting speech.
+         *
+         * We intentionally do NOT wait 3500ms.
+         * The browser speech engine continues independently
+         * while Next.js performs client-side navigation.
+         */
+        router.push(
+          data.destination as string
+        );
       }
     } catch (error) {
       console.error(
@@ -1183,7 +707,6 @@ export default function VoicePage() {
       } catch {}
 
       setSpeaking(false);
-
       return;
     }
 
@@ -1201,7 +724,9 @@ export default function VoicePage() {
           <button
             type="button"
             onClick={() =>
-              navigateTo("/dashboard")
+              router.push(
+                "/dashboard"
+              )
             }
             className="font-bold text-slate-300 transition hover:text-white"
           >
@@ -1252,6 +777,7 @@ export default function VoicePage() {
             text-6xl
             shadow-2xl
             transition
+
             ${
               recording
                 ? "animate-pulse bg-red-500"

@@ -1,333 +1,199 @@
+import OpenAI from "openai";
 import { NextResponse } from "next/server";
+
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
-      console.error("OPENAI_API_KEY is missing.");
-
       return NextResponse.json(
         {
           error: "OPENAI_API_KEY is missing.",
         },
-        { status: 500 }
-      );
-    }
-
-    const body = await request.json();
-    const profile = body?.profile || {};
-    const language = profile.language || "English";
-
-    const allowedPaths = [
-      "/dashboard",
-      "/dutch-phone-number",
-      "/housing",
-      "/documents",
-      "/healthcare",
-      "/money",
-      "/work",
-      "/study",
-      "/transport",
-      "/municipality",
-      "/vehicles",
-      "/waste",
-      "/explore",
-      "/plan-day",
-      "/trip-planner",
-      "/scanner",
-      "/what-do-i-do",
-      "/voice",
-    ];
-
-    const navigationTool = {
-      type: "function",
-      name: "navigate_to_page",
-      description:
-        "Navigate the user to a relevant Netherlands Guide section when clearly useful.",
-      parameters: {
-        type: "object",
-        properties: {
-          path: {
-            type: "string",
-            enum: allowedPaths,
-            description:
-              "The Netherlands Guide page to open.",
-          },
-          reason: {
-            type: "string",
-            description:
-              "Brief reason why this page is useful.",
-          },
-        },
-        required: ["path"],
-      },
-    };
-
-    const instructions = `
-You are Netherlands Guide AI.
-
-You are a warm, friendly female voice assistant helping people
-with practical everyday life in the Netherlands.
-
-Speak naturally and conversationally.
-
-Be warm, friendly, patient and reassuring.
-
-Keep answers relatively short.
-
-Do not sound robotic.
-
-Do not repeatedly say "As an AI".
-
-Do not repeatedly say "How can I assist you today?"
-
-Do not repeat the user's question.
-
-Remember the conversation and understand follow-up questions.
-
-The user's selected language is:
-
-${language}
-
-Use that language as the default language.
-
-If the user explicitly asks to change language,
-immediately switch to the requested language.
-
-You help with:
-
-- Dutch government
-- municipalities
-- BSN
-- DigiD
-- registration
-- residence documents
-- immigration practical information
-- official letters
-- healthcare
-- huisarts
-- health insurance
-- housing
-- renting
-- work
-- jobs
-- employment
-- studying
-- education
-- money
-- banking
-- taxes
-- public transport
-- OV-chipkaart
-- OVpay
-- driving
-- driving licence
-- vehicles
-- parking
-- waste
-- Dutch phone numbers
-- SIM cards
-- travelling
-- finding services
-- planning
-
-You are primarily a Netherlands Guide.
-
-If something is completely unrelated to life in the
-Netherlands, politely bring the conversation back to
-Netherlands-related help.
-
-VOICE:
-
-The user is speaking through a microphone.
-
-Listen carefully.
-
-Do not intentionally talk over the user.
-
-If the user interrupts you, stop and listen.
-
-NAVIGATION:
-
-You have a tool called navigate_to_page.
-
-Use it when navigation is clearly useful.
-
-Examples:
-
-Public transport -> /transport
-BSN or DigiD -> /documents
-Work or jobs -> /work
-Healthcare -> /healthcare
-Housing -> /housing
-Money or taxes -> /money
-Study -> /study
-Driving -> /vehicles
-Waste -> /waste
-Trip planning -> /trip-planner
-
-Do not navigate merely because a keyword was mentioned.
-
-After navigation, continue helping the user naturally.
-
-Do not say:
-"I successfully navigated you."
-
-Instead say something natural such as:
-"Okay, we're here. Let's figure this out together."
-
-USER PROFILE:
-
-Name:
-${profile.name || "Not provided"}
-
-Age:
-${profile.age || "Not provided"}
-
-City:
-${profile.city || "Not provided"}
-
-Profile:
-${profile.profile || "Not provided"}
-
-Preferred language:
-${language}
-
-Use profile information only when relevant.
-
-SAFETY:
-
-Never ask the user for:
-
-- DigiD password
-- DigiD PIN
-- bank password
-- card PIN
-- verification code
-- authentication code
-- passwords
-- secret credentials
-
-Never ask the user to read these aloud.
-
-You are a conversational guide first.
-
-Navigation is an additional capability.
-
-Keep helping the user naturally.
-`.trim();
-
-    console.log(
-      "Creating OpenAI Realtime client secret..."
-    );
-
-    const openAIResponse = await fetch(
-      "https://api.openai.com/v1/realtime/client_secrets",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          session: {
-            type: "realtime",
-            model: "gpt-realtime",
-            instructions,
-            tools: [navigationTool],
-            tool_choice: "auto",
-            audio: {
-              output: {
-                voice: "marin",
-              },
-            },
-          },
-        }),
-      }
-    );
-
-    const responseText =
-      await openAIResponse.text();
-
-    let data: any;
-
-    try {
-      data = JSON.parse(responseText);
-    } catch {
-      console.error(
-        "OpenAI returned non-JSON:",
-        responseText
-      );
-
-      return NextResponse.json(
         {
-          error:
-            "OpenAI returned an invalid response.",
-        },
-        { status: 500 }
-      );
-    }
-
-    if (!openAIResponse.ok) {
-      console.error(
-        "OpenAI Realtime error:",
-        openAIResponse.status,
-        data
-      );
-
-      return NextResponse.json(
-        {
-          error:
-            data?.error?.message ||
-            "Could not create realtime voice session.",
-        },
-        {
-          status: openAIResponse.status,
+          status: 500,
         }
       );
     }
 
-    const clientSecret =
-      data?.value ||
-      data?.client_secret?.value ||
-      data?.client_secret;
+    const formData = await request.formData();
 
-    if (!clientSecret) {
-      console.error(
-        "OpenAI response did not contain a client secret:",
-        data
-      );
+    const file = formData.get("file");
 
+    const language = String(
+      formData.get("language") || "English"
+    );
+
+    if (!(file instanceof File)) {
       return NextResponse.json(
         {
-          error:
-            "Realtime client secret was not returned.",
+          error: "No file was uploaded.",
         },
-        { status: 500 }
+        {
+          status: 400,
+        }
       );
     }
 
-    console.log(
-      "Realtime client secret created successfully."
-    );
+    const bytes = await file.arrayBuffer();
+
+    const base64 = Buffer.from(bytes).toString("base64");
+
+    const mimeType =
+      file.type || "image/jpeg";
+
+    const fileData =
+      `data:${mimeType};base64,${base64}`;
+
+    const openai = new OpenAI({
+      apiKey,
+    });
+
+    const prompt = `
+You are Netherlands Guide AI.
+
+The user uploaded a Dutch government or official letter.
+
+Explain the letter in ${language}.
+
+Use simple, easy-to-understand language.
+
+Clearly explain:
+
+1. Who sent the letter
+2. What the letter is about
+3. What the user needs to do
+4. Any important deadline
+5. Any payment or amount mentioned
+6. Any appointment mentioned
+7. Any documents needed
+8. What may happen if the user does nothing
+9. A short summary
+
+Important rules:
+
+- Do NOT invent information.
+- Only use information actually visible in the document.
+- If something is unclear or unreadable, say so.
+- Preserve important dates, amounts, names and reference numbers accurately.
+- Explain Dutch government terminology in simple English.
+- If the document appears to be from a Dutch government organization, identify the organization if it is clearly visible.
+`;
+
+    let response;
+
+    /*
+     * IMAGE
+     */
+
+    if (mimeType.startsWith("image/")) {
+      response = await openai.responses.create({
+        model: "gpt-4.1-mini",
+
+        input: [
+          {
+            role: "user",
+
+            content: [
+              {
+                type: "input_text",
+                text: prompt,
+              },
+
+              {
+                type: "input_image",
+                image_url: fileData,
+                detail: "high",
+              },
+            ],
+          },
+        ],
+      });
+    }
+
+    /*
+     * PDF
+     */
+
+    else if (mimeType === "application/pdf") {
+      response = await openai.responses.create({
+        model: "gpt-4.1-mini",
+
+        input: [
+          {
+            role: "user",
+
+            content: [
+              {
+                type: "input_text",
+                text: prompt,
+              },
+
+              {
+                type: "input_file",
+                filename: file.name,
+                file_data: fileData,
+              },
+            ],
+          },
+        ],
+      });
+    }
+
+    /*
+     * UNSUPPORTED FILE
+     */
+
+    else {
+      return NextResponse.json(
+        {
+          error:
+            "Unsupported file type. Please upload an image or PDF.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const reply = response.output_text;
+
+    if (!reply) {
+      return NextResponse.json(
+        {
+          error:
+            "AI returned an empty response.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
 
     return NextResponse.json({
-      client_secret: clientSecret,
+      success: true,
+      reply,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(
-      "Realtime route error:",
+      "LETTER SCANNING ERROR:",
       error
     );
 
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown AI error.";
+
     return NextResponse.json(
       {
-        error:
-          error?.message ||
-          "Could not create realtime voice session.",
+        error: message,
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
