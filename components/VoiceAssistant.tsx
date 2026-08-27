@@ -46,21 +46,32 @@ export default function VoiceAssistant() {
     useState("");
 
   const peerConnectionRef =
-    useRef<RTCPeerConnection | null>(null);
-
-  const dataChannelRef =
-    useRef<RTCDataChannel | null>(null);
-
-  const microphoneStreamRef =
-    useRef<MediaStream | null>(null);
-
-  const audioElementRef =
-    useRef<HTMLAudioElement | null>(null);
-
-  const navigationTimeoutRef =
-    useRef<ReturnType<typeof setTimeout> | null>(
+    useRef<RTCPeerConnection | null>(
       null
     );
+
+  const dataChannelRef =
+    useRef<RTCDataChannel | null>(
+      null
+    );
+
+  const microphoneStreamRef =
+    useRef<MediaStream | null>(
+      null
+    );
+
+  const audioElementRef =
+    useRef<HTMLAudioElement | null>(
+      null
+    );
+
+  const navigationTimeoutRef =
+    useRef<ReturnType<
+      typeof setTimeout
+    > | null>(null);
+
+  const disconnectingRef =
+    useRef(false);
 
   // ============================================================
   // LOAD PROFILE
@@ -111,6 +122,9 @@ export default function VoiceAssistant() {
     setError("");
     setConnecting(true);
 
+    disconnectingRef.current =
+      false;
+
     try {
       // --------------------------------------------------------
       // MICROPHONE
@@ -118,7 +132,8 @@ export default function VoiceAssistant() {
 
       if (
         !navigator.mediaDevices ||
-        !navigator.mediaDevices.getUserMedia
+        !navigator.mediaDevices
+          .getUserMedia
       ) {
         throw new Error(
           "Microphone access is not available on this device."
@@ -126,20 +141,22 @@ export default function VoiceAssistant() {
       }
 
       const mediaStream =
-        await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            channelCount: 1,
-          },
-        });
+        await navigator.mediaDevices.getUserMedia(
+          {
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              channelCount: 1,
+            },
+          }
+        );
 
       microphoneStreamRef.current =
         mediaStream;
 
       // --------------------------------------------------------
-      // GET EPHEMERAL CLIENT SECRET
+      // GET EPHEMERAL KEY
       // --------------------------------------------------------
 
       const tokenResponse =
@@ -179,7 +196,7 @@ export default function VoiceAssistant() {
       }
 
       // --------------------------------------------------------
-      // PEER CONNECTION
+      // CREATE PEER CONNECTION
       // --------------------------------------------------------
 
       const peerConnection =
@@ -207,8 +224,7 @@ export default function VoiceAssistant() {
 
       /*
        * Normal volume.
-       *
-       * We do NOT amplify the voice.
+       * We do NOT amplify the audio.
        */
 
       audioElement.volume = 1;
@@ -230,12 +246,7 @@ export default function VoiceAssistant() {
 
             audioElementRef.current
               .play()
-              .catch((error) => {
-                console.warn(
-                  "Audio playback failed:",
-                  error
-                );
-              });
+              .catch(() => {});
           }
         };
 
@@ -266,26 +277,25 @@ export default function VoiceAssistant() {
 
       dataChannel.onopen = () => {
         console.log(
-          "Realtime data channel connected."
+          "Realtime voice connected."
         );
 
         setConnected(true);
         setConnecting(false);
 
         /*
-         * The server already knows the preferred
-         * language from the user's profile.
+         * The server already received
+         * the user's preferred language.
          *
-         * This reinforces it before the first response.
+         * Tell the model to greet using it.
          */
 
         sendEvent({
-          type:
-            "response.create",
+          type: "response.create",
 
           response: {
             instructions:
-              "Give a short, warm greeting. Speak ONLY in the user's preferred language from their profile. Do not use English unless English is the selected preferred language. Start immediately in that preferred language.",
+              "Give a very short friendly greeting. You MUST use the user's preferred language from the session instructions. Do not use another language. Do not say hello in English unless English is the selected preferred language.",
           },
         });
       };
@@ -344,7 +354,8 @@ export default function VoiceAssistant() {
 
           if (
             state === "failed" ||
-            state === "disconnected" ||
+            state ===
+              "disconnected" ||
             state === "closed"
           ) {
             setConnected(false);
@@ -364,24 +375,17 @@ export default function VoiceAssistant() {
         offer
       );
 
-      if (!offer.sdp) {
-        throw new Error(
-          "Could not create the WebRTC SDP offer."
-        );
-      }
-
       // --------------------------------------------------------
-      // OPENAI REALTIME WEBRTC CONNECTION
+      // CONNECT TO OPENAI REALTIME
       // --------------------------------------------------------
 
       /*
-       * THIS IS THE IMPORTANT PART.
+       * THIS IS THE IMPORTANT FIX.
        *
-       * The Realtime calls endpoint expects:
+       * The OpenAI Realtime calls endpoint
+       * requires application/sdp.
        *
-       * Content-Type: application/sdp
-       *
-       * NOT application/json.
+       * DO NOT change this to application/json.
        */
 
       const realtimeResponse =
@@ -409,7 +413,7 @@ export default function VoiceAssistant() {
           await realtimeResponse.text();
 
         console.error(
-          "Realtime WebRTC error:",
+          "Realtime service error:",
           errorText
         );
 
@@ -422,12 +426,6 @@ export default function VoiceAssistant() {
       const answerSdp =
         await realtimeResponse.text();
 
-      if (!answerSdp) {
-        throw new Error(
-          "Realtime service returned an empty SDP answer."
-        );
-      }
-
       await peerConnection.setRemoteDescription(
         {
           type: "answer",
@@ -436,7 +434,7 @@ export default function VoiceAssistant() {
       );
 
       console.log(
-        "Realtime voice session connected."
+        "Realtime voice session started."
       );
     } catch (error) {
       console.error(
@@ -449,10 +447,7 @@ export default function VoiceAssistant() {
       setListening(false);
       setSpeaking(false);
 
-      // --------------------------------------------------------
-      // CLEAN MICROPHONE
-      // --------------------------------------------------------
-
+      // Stop microphone
       if (
         microphoneStreamRef.current
       ) {
@@ -522,13 +517,12 @@ export default function VoiceAssistant() {
         );
 
         setError(
-          event.error?.message ||
+          event?.error?.message ||
             "The voice assistant encountered an error."
         );
 
         setSpeaking(false);
         setListening(false);
-
         break;
 
       default:
@@ -537,14 +531,14 @@ export default function VoiceAssistant() {
   }
 
   // ============================================================
-  // NAVIGATION
+  // NAVIGATION FUNCTION
   // ============================================================
 
   function handleFunctionCall(
     event: RealtimeEvent
   ) {
     if (
-      event.name !==
+      event?.name !==
       "navigate_to_page"
     ) {
       return;
@@ -561,7 +555,8 @@ export default function VoiceAssistant() {
 
       const destination =
         args &&
-        typeof args === "object" &&
+        typeof args ===
+          "object" &&
         "path" in args
           ? (
               args as {
@@ -573,7 +568,9 @@ export default function VoiceAssistant() {
       if (
         typeof destination !==
           "string" ||
-        !destination.startsWith("/")
+        !destination.startsWith(
+          "/"
+        )
       ) {
         return;
       }
@@ -582,10 +579,6 @@ export default function VoiceAssistant() {
         "AI NAVIGATION:",
         destination
       );
-
-      // --------------------------------------------------------
-      // FUNCTION OUTPUT
-      // --------------------------------------------------------
 
       sendEvent({
         type:
@@ -606,23 +599,15 @@ export default function VoiceAssistant() {
         },
       });
 
-      // --------------------------------------------------------
-      // CONTINUE RESPONSE
-      // --------------------------------------------------------
-
       sendEvent({
         type:
           "response.create",
 
         response: {
           instructions:
-            "Continue naturally after navigation. Do not mention technical details. Continue speaking in the user's preferred language.",
+            "Continue naturally after the navigation. Do not mention technical details. Do not mention clicking buttons or APIs.",
         },
       });
-
-      // --------------------------------------------------------
-      // NAVIGATE
-      // --------------------------------------------------------
 
       if (
         navigationTimeoutRef.current
@@ -684,7 +669,7 @@ export default function VoiceAssistant() {
   }
 
   // ============================================================
-  // STOP SPEAKING
+  // STOP AI SPEECH
   // ============================================================
 
   function stopSpeaking() {
@@ -706,84 +691,100 @@ export default function VoiceAssistant() {
 
   function disconnectVoice() {
     if (
-      navigationTimeoutRef.current
+      disconnectingRef.current
     ) {
-      clearTimeout(
+      return;
+    }
+
+    disconnectingRef.current =
+      true;
+
+    try {
+      if (
         navigationTimeoutRef.current
-      );
+      ) {
+        clearTimeout(
+          navigationTimeoutRef.current
+        );
 
-      navigationTimeoutRef.current =
-        null;
-    }
-
-    // ----------------------------------------------------------
-    // DATA CHANNEL
-    // ----------------------------------------------------------
-
-    const channel =
-      dataChannelRef.current;
-
-    if (channel) {
-      try {
-        channel.close();
-      } catch {}
-    }
-
-    // ----------------------------------------------------------
-    // MICROPHONE
-    // ----------------------------------------------------------
-
-    const microphone =
-      microphoneStreamRef.current;
-
-    if (microphone) {
-      microphone
-        .getTracks()
-        .forEach((track) => {
-          try {
-            track.stop();
-          } catch {}
-        });
-    }
-
-    // ----------------------------------------------------------
-    // PEER CONNECTION
-    // ----------------------------------------------------------
-
-    const peerConnection =
-      peerConnectionRef.current;
-
-    if (peerConnection) {
-      try {
-        peerConnection.close();
-      } catch {}
-    }
-
-    // ----------------------------------------------------------
-    // AUDIO
-    // ----------------------------------------------------------
-
-    const audioElement =
-      audioElementRef.current;
-
-    if (audioElement) {
-      try {
-        audioElement.pause();
-      } catch {}
-
-      try {
-        audioElement.srcObject =
+        navigationTimeoutRef.current =
           null;
-      } catch {}
+      }
+
+      // Close data channel
+      const channel =
+        dataChannelRef.current;
+
+      if (channel) {
+        try {
+          channel.close();
+        } catch {}
+      }
+
+      // Stop microphone
+      const microphone =
+        microphoneStreamRef.current;
+
+      if (microphone) {
+        microphone
+          .getTracks()
+          .forEach((track) => {
+            try {
+              track.stop();
+            } catch {}
+          });
+      }
+
+      microphoneStreamRef.current =
+        null;
+
+      // Close peer connection
+      const peerConnection =
+        peerConnectionRef.current;
+
+      if (peerConnection) {
+        try {
+          peerConnection
+            .getSenders()
+            .forEach(
+              (sender) => {
+                try {
+                  sender.track?.stop();
+                } catch {}
+              }
+            );
+        } catch {}
+
+        try {
+          peerConnection.close();
+        } catch {}
+      }
+
+      // Stop audio
+      const audioElement =
+        audioElementRef.current;
+
+      if (audioElement) {
+        try {
+          audioElement.pause();
+        } catch {}
+
+        try {
+          audioElement.srcObject =
+            null;
+        } catch {}
+      }
+    } catch (error) {
+      console.error(
+        "Voice cleanup error:",
+        error
+      );
     }
 
     peerConnectionRef.current =
       null;
 
     dataChannelRef.current =
-      null;
-
-    microphoneStreamRef.current =
       null;
 
     audioElementRef.current =
@@ -793,28 +794,31 @@ export default function VoiceAssistant() {
     setConnecting(false);
     setListening(false);
     setSpeaking(false);
+
+    disconnectingRef.current =
+      false;
   }
 
   // ============================================================
-  // MAIN MIC BUTTON
+  // MIC BUTTON
   // ============================================================
 
   function handleVoiceButton() {
     setError("");
 
-    // If AI is speaking → stop her.
+    // AI speaking → stop speaking
     if (speaking) {
       stopSpeaking();
       return;
     }
 
-    // If connected → turn microphone/assistant OFF.
+    // Voice ON → turn voice OFF
     if (connected) {
       disconnectVoice();
       return;
     }
 
-    // Otherwise → turn it ON.
+    // Voice OFF → turn voice ON
     startVoice();
   }
 
@@ -824,9 +828,7 @@ export default function VoiceAssistant() {
 
   return (
     <>
-      {/* ======================================================
-          MAIN MIC BUTTON
-      ====================================================== */}
+      {/* MIC BUTTON */}
 
       <button
         type="button"
@@ -836,7 +838,7 @@ export default function VoiceAssistant() {
         disabled={connecting}
         aria-label={
           connecting
-            ? "Connecting"
+            ? "Connecting to voice assistant"
             : speaking
             ? "Stop speaking"
             : connected
@@ -870,7 +872,7 @@ export default function VoiceAssistant() {
               : listening
               ? "animate-pulse bg-orange-600 text-white shadow-orange-600/50 ring-4 ring-orange-200"
               : connecting
-              ? "cursor-wait bg-indigo-600 text-white"
+              ? "cursor-wait bg-indigo-600 text-white shadow-indigo-500/40"
               : connected
               ? "bg-red-500 text-white shadow-red-500/40 hover:scale-110"
               : "bg-orange-500 text-white shadow-orange-500/40 hover:scale-110 hover:bg-orange-600"
@@ -888,9 +890,7 @@ export default function VoiceAssistant() {
           : "🎤"}
       </button>
 
-      {/* ======================================================
-          CONNECTING
-      ====================================================== */}
+      {/* CONNECTING */}
 
       {connecting && (
         <div
@@ -917,9 +917,7 @@ export default function VoiceAssistant() {
         </div>
       )}
 
-      {/* ======================================================
-          LISTENING
-      ====================================================== */}
+      {/* LISTENING */}
 
       {connected &&
         listening &&
@@ -948,9 +946,7 @@ export default function VoiceAssistant() {
           </div>
         )}
 
-      {/* ======================================================
-          SPEAKING
-      ====================================================== */}
+      {/* SPEAKING */}
 
       {connected &&
         speaking && (
@@ -978,9 +974,7 @@ export default function VoiceAssistant() {
           </div>
         )}
 
-      {/* ======================================================
-          CONNECTED
-      ====================================================== */}
+      {/* CONNECTED */}
 
       {connected &&
         !listening &&
@@ -1009,9 +1003,7 @@ export default function VoiceAssistant() {
           </div>
         )}
 
-      {/* ======================================================
-          ERROR
-      ====================================================== */}
+      {/* ERROR */}
 
       {error && (
         <div
