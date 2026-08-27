@@ -1,7 +1,110 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
 
 export const runtime = "nodejs";
+
+function getLanguage(language: unknown) {
+  const value = String(language || "English")
+    .trim()
+    .toLowerCase();
+
+  if (value.includes("urdu") || value.includes("اردو")) {
+    return { name: "Urdu", code: "ur" };
+  }
+
+  if (
+    value.includes("dutch") ||
+    value.includes("nederlands") ||
+    value === "nl"
+  ) {
+    return { name: "Dutch", code: "nl" };
+  }
+
+  if (
+    value.includes("german") ||
+    value.includes("deutsch") ||
+    value === "de"
+  ) {
+    return { name: "German", code: "de" };
+  }
+
+  if (
+    value.includes("arabic") ||
+    value.includes("العربية") ||
+    value === "ar"
+  ) {
+    return { name: "Arabic", code: "ar" };
+  }
+
+  if (
+    value.includes("hindi") ||
+    value.includes("हिन्दी") ||
+    value.includes("हिंदी") ||
+    value === "hi"
+  ) {
+    return { name: "Hindi", code: "hi" };
+  }
+
+  if (
+    value.includes("punjabi") ||
+    value.includes("ਪੰਜਾਬੀ") ||
+    value === "pa"
+  ) {
+    return { name: "Punjabi", code: "pa" };
+  }
+
+  if (
+    value.includes("french") ||
+    value.includes("français") ||
+    value === "fr"
+  ) {
+    return { name: "French", code: "fr" };
+  }
+
+  if (
+    value.includes("spanish") ||
+    value.includes("español") ||
+    value === "es"
+  ) {
+    return { name: "Spanish", code: "es" };
+  }
+
+  if (
+    value.includes("turkish") ||
+    value.includes("türkçe") ||
+    value === "tr"
+  ) {
+    return { name: "Turkish", code: "tr" };
+  }
+
+  if (
+    value.includes("italian") ||
+    value.includes("italiano") ||
+    value === "it"
+  ) {
+    return { name: "Italian", code: "it" };
+  }
+
+  if (
+    value.includes("portuguese") ||
+    value.includes("português") ||
+    value === "pt"
+  ) {
+    return { name: "Portuguese", code: "pt" };
+  }
+
+  if (
+    value.includes("polish") ||
+    value.includes("polski") ||
+    value === "pl"
+  ) {
+    return { name: "Polish", code: "pl" };
+  }
+
+  return {
+    name: "English",
+    code: "en",
+  };
+}
 
 export async function POST(request: Request) {
   try {
@@ -12,298 +115,222 @@ export async function POST(request: Request) {
         {
           error: "OPENAI_API_KEY is missing.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
     const body = await request.json();
+
     const profile = body?.profile || {};
 
-    const preferredLanguage = String(
-      profile?.language || "English"
-    ).trim();
-
-    const languageLower = preferredLanguage.toLowerCase();
-
-    // ============================================================
-    // NORMALIZE LANGUAGE
-    // ============================================================
-
-    let languageName = "English";
-    let languageCode = "en";
-
-    if (
-      languageLower.includes("urdu") ||
-      languageLower.includes("اردو")
-    ) {
-      languageName = "Urdu";
-      languageCode = "ur";
-    } else if (
-      languageLower.includes("dutch") ||
-      languageLower.includes("nederlands") ||
-      languageLower === "nl"
-    ) {
-      languageName = "Dutch";
-      languageCode = "nl";
-    } else if (
-      languageLower.includes("arabic") ||
-      languageLower.includes("العربية")
-    ) {
-      languageName = "Arabic";
-      languageCode = "ar";
-    } else if (
-      languageLower.includes("punjabi") ||
-      languageLower.includes("ਪੰਜਾਬੀ")
-    ) {
-      languageName = "Punjabi";
-      languageCode = "pa";
-    } else if (
-      languageLower.includes("hindi") ||
-      languageLower.includes("हिन्दी") ||
-      languageLower.includes("हिंदी")
-    ) {
-      languageName = "Hindi";
-      languageCode = "hi";
-    } else if (
-      languageLower.includes("german") ||
-      languageLower.includes("deutsch")
-    ) {
-      languageName = "German";
-      languageCode = "de";
-    } else if (
-      languageLower.includes("french") ||
-      languageLower.includes("français")
-    ) {
-      languageName = "French";
-      languageCode = "fr";
-    } else if (
-      languageLower.includes("turkish") ||
-      languageLower.includes("türkçe")
-    ) {
-      languageName = "Turkish";
-      languageCode = "tr";
-    } else if (
-      languageLower.includes("spanish") ||
-      languageLower.includes("español")
-    ) {
-      languageName = "Spanish";
-      languageCode = "es";
-    }
-
-    // ============================================================
-    // OPENAI
-    // ============================================================
-
-    const openai = new OpenAI({
-      apiKey,
-    });
-
-    // ============================================================
-    // ASSISTANT INSTRUCTIONS
-    // ============================================================
+    const language = getLanguage(
+      profile?.language
+    );
 
     const instructions = `
 You are the friendly voice assistant inside Netherway.
 
-You are a warm, patient and natural female voice assistant.
+You are a warm, friendly, natural female voice assistant.
 
-You should feel like a real person helping someone who is living in or moving to the Netherlands.
+You help people understand and navigate life in the Netherlands.
 
 USER PROFILE:
 
 Name: ${profile?.name || "Unknown"}
 Age: ${profile?.age || "Unknown"}
 City: ${profile?.city || "Unknown"}
-Preferred language: ${preferredLanguage}
+Preferred language: ${language.name}
 
-============================================================
-LANGUAGE — CRITICAL
-============================================================
+==================================================
+VERY IMPORTANT LANGUAGE RULE
+==================================================
 
 The user's preferred language is:
 
-${languageName}
+${language.name}
 
-Language code:
+You MUST speak ${language.name}.
 
-${languageCode}
+You MUST start your very first word in ${language.name}.
 
-YOU MUST SPEAK ${languageName} FROM YOUR VERY FIRST WORD.
+DO NOT start in English unless the preferred language is English.
 
-Do NOT begin in English if the user's preferred language is not English.
+DO NOT start in German.
 
-For example, if the preferred language is Urdu, your first greeting must be in Urdu.
+DO NOT start in Dutch.
 
-If the preferred language is Dutch, your first greeting must be in Dutch.
+DO NOT guess the language.
 
-Continue speaking ${languageName} throughout the conversation.
+DO NOT automatically change languages.
 
-Only change language if the user clearly asks you to.
+The saved profile language is authoritative.
 
-If the user speaks another language without explicitly asking to change,
-continue using their selected preferred language.
+If the profile says English:
+Speak English.
 
-============================================================
+If the profile says Urdu:
+Speak Urdu.
+
+If the profile says Dutch:
+Speak Dutch.
+
+If the profile says German:
+Speak German.
+
+If the profile says Arabic:
+Speak Arabic.
+
+If the profile says Hindi:
+Speak Hindi.
+
+Continue using ${language.name} unless the user explicitly asks you to change language.
+
+==================================================
 PERSONALITY
-============================================================
+==================================================
 
-Be:
+Be warm, friendly, patient and reassuring.
 
-- warm
-- friendly
-- natural
-- patient
-- reassuring
-- conversational
-- helpful
+Sound like a friendly woman helping someone personally.
 
 Do not sound robotic.
 
-Do not sound like a call center.
+Do not sound like a call centre.
 
-Do not give unnecessarily long answers.
+Keep answers natural and relatively short.
 
-Keep responses natural for spoken conversation.
+Do not give huge paragraphs.
 
-You can say things like:
+Have a real conversation.
 
-"Of course, I can help you with that."
-
-"Don't worry, we'll figure it out together."
-
-"Sure, let me help you."
-
-============================================================
-NETHERLANDS GUIDE
-============================================================
-
-You help users with:
-
-- housing
-- Dutch phone numbers
-- documents
-- BSN
-- DigiD
-- healthcare
-- health insurance
-- money
-- banking
-- taxes
-- jobs
-- education
-- public transport
-- cars
-- driving
-- parking
-- waste
-- municipalities
-- exploring the Netherlands
-- trip planning
-- day planning
-- scanning letters
-- Dutch government letters
-
-============================================================
+==================================================
 NAVIGATION
-============================================================
+==================================================
 
-You have a navigation function called:
+When the user clearly wants to open a section of Netherway,
+use the navigate_to_page function.
 
-navigate_to_page
+Available pages include:
 
-Use it when the user clearly wants to go to a section of the app.
-
-Examples:
-
-"I want to find a house"
-→ housing
-
-"I need help with my BSN"
-→ documents
-
-"I want to find a job"
-→ work
-
-"I need health insurance"
-→ healthcare
-
-"I want to plan a trip"
-→ trip planner
-
-"I want to scan a letter"
-→ scanner
-
-"I need help with my car"
-→ vehicles
-
-"I want to learn about public transport"
-→ transport
+/dashboard
+/dutch-phone-number
+/housing
+/documents
+/healthcare
+/money
+/work
+/study
+/transport
+/municipality
+/vehicles
+/waste
+/explore
+/plan-day
+/trip-planner
+/scanner
+/what-do-i-do
 
 Never mention technical details.
 
 Never say you are clicking a button.
 
-Never say you cannot navigate.
+Never mention APIs or functions.
 
-============================================================
-VOICE CONVERSATION
-============================================================
+==================================================
+VOICE
+==================================================
 
 This is a real-time voice conversation.
-
-Do not wait for a send button.
 
 Listen naturally.
 
 Respond naturally.
 
-Do not repeat the entire user's sentence.
+Do not wait for a send button.
 
-Keep responses short enough to sound natural when spoken.
+Do not repeat the user's entire sentence.
 
-Always prioritize the user's selected language:
-
-${languageName}
+Always speak ${language.name}.
 `;
 
     // ============================================================
-    // CREATE REALTIME CLIENT SECRET
+    // CREATE REALTIME SESSION
     // ============================================================
 
-    const session =
-      await openai.realtime.clientSecrets.create({
-        session: {
-          type: "realtime",
+    const response = await fetch(
+      "https://api.openai.com/v1/realtime/sessions",
+      {
+        method: "POST",
 
-          model: "gpt-realtime",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
 
-          instructions,
+        body: JSON.stringify({
+          session: {
+            type: "realtime",
 
-          audio: {
-            output: {
-              voice: "shimmer",
+            model: "gpt-4o-realtime-preview",
+
+            instructions,
+
+            audio: {
+              output: {
+                voice: "shimmer",
+              },
             },
           },
-        },
-      });
+        }),
+      }
+    );
 
-    const clientSecret =
-      session?.value;
+    const data = await response.json();
 
-    if (!clientSecret) {
+    if (!response.ok) {
+      console.error(
+        "Realtime session creation failed:",
+        data
+      );
+
       return NextResponse.json(
         {
           error:
-            "Could not create realtime client secret.",
+            data?.error?.message ||
+            "Could not create realtime voice session.",
         },
-        { status: 500 }
+        {
+          status: response.status,
+        }
+      );
+    }
+
+    const clientSecret =
+      data?.client_secret?.value;
+
+    if (!clientSecret) {
+      console.error(
+        "Realtime response did not contain client secret:",
+        data
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "Realtime session was created but no client secret was returned.",
+        },
+        {
+          status: 500,
+        }
       );
     }
 
     return NextResponse.json({
       client_secret: clientSecret,
-      language: languageName,
-      language_code: languageCode,
+      language: language.name,
+      language_code: language.code,
     });
   } catch (error) {
     console.error(
@@ -318,7 +345,9 @@ ${languageName}
             ? error.message
             : "Could not start realtime voice assistant.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
