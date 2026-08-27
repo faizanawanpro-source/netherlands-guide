@@ -49,8 +49,8 @@ export default function VoiceAssistant() {
   const navigationTimeoutRef =
     useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const mountedRef =
-    useRef(true);
+  const disconnectingRef =
+    useRef(false);
 
   // ============================================================
   // LOAD PROFILE
@@ -58,83 +58,43 @@ export default function VoiceAssistant() {
 
   useEffect(() => {
     try {
-      const saved =
-        localStorage.getItem(
-          "netherlandsGuideProfile"
-        );
+      const saved = localStorage.getItem(
+        "netherlandsGuideProfile"
+      );
 
       if (saved) {
-        const parsed = JSON.parse(saved);
-
-        if (parsed && typeof parsed === "object") {
-          setProfile(parsed);
-        }
+        setProfile(JSON.parse(saved));
       }
-    } catch (err) {
+    } catch (error) {
       console.error(
         "Could not load profile:",
-        err
+        error
       );
     }
   }, []);
 
   // ============================================================
-  // COMPONENT CLEANUP
+  // CLEANUP
   // ============================================================
 
   useEffect(() => {
-    mountedRef.current = true;
-
     return () => {
-      mountedRef.current = false;
       disconnectVoice();
     };
   }, []);
 
   // ============================================================
-  // SEND EVENT TO REALTIME
-  // ============================================================
-
-  function sendEvent(event: Record<string, unknown>) {
-    const channel =
-      dataChannelRef.current;
-
-    if (
-      !channel ||
-      channel.readyState !== "open"
-    ) {
-      console.warn(
-        "Realtime channel is not ready."
-      );
-      return;
-    }
-
-    try {
-      channel.send(
-        JSON.stringify(event)
-      );
-    } catch (err) {
-      console.error(
-        "Could not send realtime event:",
-        err
-      );
-    }
-  }
-
-  // ============================================================
-  // START VOICE
+  // START VOICE ASSISTANT
   // ============================================================
 
   async function startVoice() {
-    if (
-      connecting ||
-      connected
-    ) {
+    if (connecting || connected) {
       return;
     }
 
     setError("");
     setConnecting(true);
+    disconnectingRef.current = false;
 
     try {
       // --------------------------------------------------------
@@ -168,21 +128,15 @@ export default function VoiceAssistant() {
       // --------------------------------------------------------
 
       const tokenResponse =
-        await fetch(
-          "/api/realtime",
-          {
-            method: "POST",
-
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-
-            body: JSON.stringify({
-              profile,
-            }),
-          }
-        );
+        await fetch("/api/realtime", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            profile,
+          }),
+        });
 
       const tokenData =
         await tokenResponse.json();
@@ -197,10 +151,7 @@ export default function VoiceAssistant() {
       const ephemeralKey =
         tokenData?.client_secret;
 
-      if (
-        typeof ephemeralKey !==
-        "string"
-      ) {
+      if (!ephemeralKey) {
         throw new Error(
           "No realtime client secret was returned."
         );
@@ -230,10 +181,9 @@ export default function VoiceAssistant() {
       );
 
       /*
-       * Keep volume normal.
-       * We are NOT boosting the audio.
+       * Keep the output at normal volume.
+       * Do NOT amplify it.
        */
-
       audioElement.volume = 1;
 
       audioElementRef.current =
@@ -245,11 +195,8 @@ export default function VoiceAssistant() {
         const stream =
           event.streams?.[0];
 
-        if (!stream) {
-          return;
-        }
-
         if (
+          stream &&
           audioElementRef.current
         ) {
           audioElementRef.current.srcObject =
@@ -257,10 +204,10 @@ export default function VoiceAssistant() {
 
           audioElementRef.current
             .play()
-            .catch((err) => {
+            .catch((error) => {
               console.warn(
-                "Audio playback waiting for user interaction:",
-                err
+                "Audio playback could not start:",
+                error
               );
             });
         }
@@ -270,12 +217,14 @@ export default function VoiceAssistant() {
       // MICROPHONE TRACK
       // --------------------------------------------------------
 
-      for (const track of mediaStream.getTracks()) {
-        peerConnection.addTrack(
-          track,
-          mediaStream
-        );
-      }
+      mediaStream
+        .getTracks()
+        .forEach((track) => {
+          peerConnection.addTrack(
+            track,
+            mediaStream
+          );
+        });
 
       // --------------------------------------------------------
       // DATA CHANNEL
@@ -294,86 +243,23 @@ export default function VoiceAssistant() {
           "Realtime voice connected."
         );
 
-        if (!mountedRef.current) {
-          return;
-        }
-
         setConnected(true);
         setConnecting(false);
 
         /*
          * IMPORTANT:
          *
-         * We explicitly tell the model to use
-         * the language selected in the user's profile.
+         * The server session already contains
+         * the user's preferred language instructions.
+         *
+         * This greeting tells the model to obey
+         * those instructions immediately.
          */
-
-        const selectedLanguage =
-          String(
-            profile?.language ||
-              "English"
-          ).trim();
-
-        sendEvent({
-          type: "session.update",
-
-          session: {
-            instructions: `
-You are the friendly female voice assistant inside Netherway.
-
-The user's preferred language is:
-${selectedLanguage}
-
-IMPORTANT:
-Speak ${selectedLanguage} from your FIRST WORD.
-
-Do NOT greet the user in English if their preferred language is not English.
-
-Do NOT randomly switch languages.
-
-The user's profile language is the source of truth.
-
-Continue speaking ${selectedLanguage} unless the user explicitly asks you to change language.
-
-You are warm, friendly, patient and natural.
-
-Speak like a friendly woman helping someone in the Netherlands.
-
-Keep answers conversational and relatively short.
-
-Never sound robotic.
-
-You can help with housing, documents, BSN, DigiD, healthcare, banking, jobs, study, transport, cars, municipalities, waste, trips, day planning and Dutch government letters.
-
-If the user clearly asks to open a section of Netherway, use the navigate_to_page function.
-
-Never mention technical details.
-`,
-          },
-        });
-
-        /*
-         * Give the assistant one short natural greeting.
-         */
-
         sendEvent({
           type: "response.create",
-
           response: {
-            instructions: `
-Greet the user warmly and naturally.
-
-Speak ONLY in the user's preferred language:
-${selectedLanguage}
-
-Keep the greeting short.
-
-Do not explain the system.
-
-Do not mention language settings.
-
-Simply greet them and tell them you are here to help.
-`,
+            instructions:
+              "Greet the user naturally and warmly in their preferred language from their profile. Do not use English unless English is their preferred language. Keep the greeting short and friendly. Do not mention technical details.",
           },
         });
       };
@@ -390,10 +276,10 @@ Simply greet them and tell them you are here to help.
           handleRealtimeEvent(
             serverEvent
           );
-        } catch (err) {
+        } catch (error) {
           console.error(
-            "Realtime event error:",
-            err
+            "Realtime event parsing error:",
+            error
           );
         }
       };
@@ -406,21 +292,9 @@ Simply greet them and tell them you are here to help.
           event
         );
 
-        if (mountedRef.current) {
-          setError(
-            "The voice connection encountered a problem."
-          );
-        }
-      };
-
-      dataChannel.onclose = () => {
-        if (!mountedRef.current) {
-          return;
-        }
-
-        setConnected(false);
-        setListening(false);
-        setSpeaking(false);
+        setError(
+          "The voice connection encountered a problem."
+        );
       };
 
       // --------------------------------------------------------
@@ -437,10 +311,6 @@ Simply greet them and tell them you are here to help.
             state
           );
 
-          if (!mountedRef.current) {
-            return;
-          }
-
           if (
             state === "connected"
           ) {
@@ -454,7 +324,6 @@ Simply greet them and tell them you are here to help.
             state === "closed"
           ) {
             setConnected(false);
-            setConnecting(false);
             setListening(false);
             setSpeaking(false);
           }
@@ -471,12 +340,6 @@ Simply greet them and tell them you are here to help.
         offer
       );
 
-      if (!offer.sdp) {
-        throw new Error(
-          "Could not create the voice connection."
-        );
-      }
-
       // --------------------------------------------------------
       // CONNECT TO OPENAI REALTIME
       // --------------------------------------------------------
@@ -486,13 +349,10 @@ Simply greet them and tell them you are here to help.
           "https://api.openai.com/v1/realtime/calls",
           {
             method: "POST",
-
             body: offer.sdp,
-
             headers: {
               Authorization:
                 `Bearer ${ephemeralKey}`,
-
               "Content-Type":
                 "application/sdp",
             },
@@ -504,7 +364,7 @@ Simply greet them and tell them you are here to help.
           await realtimeResponse.text();
 
         console.error(
-          "Realtime connection error:",
+          "Realtime service error:",
           errorText
         );
 
@@ -524,13 +384,18 @@ Simply greet them and tell them you are here to help.
       );
 
       console.log(
-        "Realtime voice session ready."
+        "Realtime voice session started."
       );
-    } catch (err) {
+    } catch (error) {
       console.error(
         "Voice connection error:",
-        err
+        error
       );
+
+      setConnecting(false);
+      setConnected(false);
+      setListening(false);
+      setSpeaking(false);
 
       // Stop microphone if connection failed.
       if (
@@ -548,18 +413,11 @@ Simply greet them and tell them you are here to help.
           null;
       }
 
-      if (mountedRef.current) {
-        setConnecting(false);
-        setConnected(false);
-        setListening(false);
-        setSpeaking(false);
-
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Could not start the voice assistant."
-        );
-      }
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not start the voice assistant."
+      );
     }
   }
 
@@ -577,7 +435,7 @@ Simply greet them and tell them you are here to help.
 
     switch (event.type) {
       // --------------------------------------------------------
-      // USER STARTED SPEAKING
+      // USER STARTED TALKING
       // --------------------------------------------------------
 
       case "input_audio_buffer.speech_started":
@@ -586,7 +444,7 @@ Simply greet them and tell them you are here to help.
         break;
 
       // --------------------------------------------------------
-      // USER STOPPED SPEAKING
+      // USER STOPPED TALKING
       // --------------------------------------------------------
 
       case "input_audio_buffer.speech_stopped":
@@ -602,20 +460,11 @@ Simply greet them and tell them you are here to help.
         setListening(false);
         break;
 
-      case "response.output_audio.delta":
-        setSpeaking(true);
-        setListening(false);
-        break;
-
       // --------------------------------------------------------
       // ASSISTANT FINISHED SPEAKING
       // --------------------------------------------------------
 
       case "response.audio.done":
-        setSpeaking(false);
-        break;
-
-      case "response.output_audio.done":
         setSpeaking(false);
         break;
 
@@ -632,7 +481,7 @@ Simply greet them and tell them you are here to help.
         break;
 
       // --------------------------------------------------------
-      // ERRORS
+      // ERROR
       // --------------------------------------------------------
 
       case "error":
@@ -642,12 +491,13 @@ Simply greet them and tell them you are here to help.
         );
 
         setError(
-          event.error?.message ||
+          event?.error?.message ||
             "The voice assistant encountered an error."
         );
 
         setSpeaking(false);
         setListening(false);
+
         break;
 
       default:
@@ -663,7 +513,7 @@ Simply greet them and tell them you are here to help.
     event: RealtimeEvent
   ) {
     if (
-      event.name !==
+      event?.name !==
       "navigate_to_page"
     ) {
       return;
@@ -678,26 +528,19 @@ Simply greet them and tell them you are here to help.
             )
           : event.arguments;
 
-      if (
-        !args ||
-        typeof args !== "object"
-      ) {
-        return;
-      }
-
       const destination =
-        (args as { path?: unknown })
-          .path;
+        args &&
+        typeof args === "object" &&
+        "path" in args
+          ? (args as { path?: unknown })
+              .path
+          : null;
 
       if (
         typeof destination !==
           "string" ||
         !destination.startsWith("/")
       ) {
-        console.warn(
-          "Invalid navigation path:",
-          destination
-        );
         return;
       }
 
@@ -707,50 +550,41 @@ Simply greet them and tell them you are here to help.
       );
 
       // --------------------------------------------------------
-      // TELL OPENAI FUNCTION SUCCEEDED
+      // CONFIRM FUNCTION SUCCESS
       // --------------------------------------------------------
 
-      if (event.call_id) {
-        sendEvent({
+      sendEvent({
+        type:
+          "conversation.item.create",
+
+        item: {
           type:
-            "conversation.item.create",
+            "function_call_output",
 
-          item: {
-            type:
-              "function_call_output",
+          call_id:
+            event.call_id,
 
-            call_id:
-              event.call_id,
+          output:
+            JSON.stringify({
+              success: true,
+              path: destination,
+            }),
+        },
+      });
 
-            output:
-              JSON.stringify({
-                success: true,
-                path: destination,
-              }),
-          },
-        });
+      // --------------------------------------------------------
+      // LET AI CONTINUE NATURALLY
+      // --------------------------------------------------------
 
-        // ------------------------------------------------------
-        // LET AI CONTINUE TALKING
-        // ------------------------------------------------------
+      sendEvent({
+        type:
+          "response.create",
 
-        sendEvent({
-          type:
-            "response.create",
-
-          response: {
-            instructions: `
-Continue naturally after navigating.
-
-Do not mention technical details.
-
-Do not say that you clicked anything.
-
-Speak naturally to the user in their selected language.
-`,
-          },
-        });
-      }
+        response: {
+          instructions:
+            "Continue the conversation naturally after navigating. Do not mention technical details. Do not say you clicked anything. Simply continue helping the user.",
+        },
+      });
 
       // --------------------------------------------------------
       // NAVIGATE
@@ -770,16 +604,50 @@ Speak naturally to the user in their selected language.
             destination
           );
         }, 700);
-    } catch (err) {
+    } catch (error) {
       console.error(
         "Navigation function error:",
-        err
+        error
       );
     }
   }
 
   // ============================================================
-  // STOP ASSISTANT SPEAKING
+  // SEND EVENT
+  // ============================================================
+
+  function sendEvent(
+    event: Record<string, unknown>
+  ) {
+    const channel =
+      dataChannelRef.current;
+
+    if (
+      !channel ||
+      channel.readyState !==
+        "open"
+    ) {
+      console.warn(
+        "Realtime channel is not ready."
+      );
+
+      return;
+    }
+
+    try {
+      channel.send(
+        JSON.stringify(event)
+      );
+    } catch (error) {
+      console.error(
+        "Could not send realtime event:",
+        error
+      );
+    }
+  }
+
+  // ============================================================
+  // STOP CURRENT AI SPEECH
   // ============================================================
 
   function stopSpeaking() {
@@ -800,6 +668,13 @@ Speak naturally to the user in their selected language.
   // ============================================================
 
   function disconnectVoice() {
+    if (disconnectingRef.current) {
+      return;
+    }
+
+    disconnectingRef.current =
+      true;
+
     try {
       if (
         navigationTimeoutRef.current
@@ -813,26 +688,7 @@ Speak naturally to the user in their selected language.
       }
 
       // --------------------------------------------------------
-      // Stop microphone
-      // --------------------------------------------------------
-
-      if (
-        microphoneStreamRef.current
-      ) {
-        microphoneStreamRef.current
-          .getTracks()
-          .forEach((track) => {
-            try {
-              track.stop();
-            } catch {}
-          });
-
-        microphoneStreamRef.current =
-          null;
-      }
-
-      // --------------------------------------------------------
-      // Close data channel
+      // CLOSE DATA CHANNEL
       // --------------------------------------------------------
 
       const channel =
@@ -845,7 +701,27 @@ Speak naturally to the user in their selected language.
       }
 
       // --------------------------------------------------------
-      // Close peer connection
+      // STOP MICROPHONE
+      // --------------------------------------------------------
+
+      const microphone =
+        microphoneStreamRef.current;
+
+      if (microphone) {
+        microphone
+          .getTracks()
+          .forEach((track) => {
+            try {
+              track.stop();
+            } catch {}
+          });
+      }
+
+      microphoneStreamRef.current =
+        null;
+
+      // --------------------------------------------------------
+      // CLOSE PEER CONNECTION
       // --------------------------------------------------------
 
       const peerConnection =
@@ -868,26 +744,26 @@ Speak naturally to the user in their selected language.
       }
 
       // --------------------------------------------------------
-      // Stop audio
+      // STOP AUDIO OUTPUT
       // --------------------------------------------------------
 
-      if (
-        audioElementRef.current
-      ) {
+      const audioElement =
+        audioElementRef.current;
+
+      if (audioElement) {
         try {
-          audioElementRef.current.pause();
+          audioElement.pause();
         } catch {}
 
-        audioElementRef.current.srcObject =
-          null;
-
-        audioElementRef.current =
-          null;
+        try {
+          audioElement.srcObject =
+            null;
+        } catch {}
       }
-    } catch (err) {
+    } catch (error) {
       console.error(
         "Voice cleanup error:",
-        err
+        error
       );
     }
 
@@ -897,13 +773,16 @@ Speak naturally to the user in their selected language.
     dataChannelRef.current =
       null;
 
-    microphoneStreamRef.current =
+    audioElementRef.current =
       null;
 
     setConnected(false);
     setConnecting(false);
     setListening(false);
     setSpeaking(false);
+
+    disconnectingRef.current =
+      false;
   }
 
   // ============================================================
@@ -914,21 +793,18 @@ Speak naturally to the user in their selected language.
     setError("");
 
     // ----------------------------------------------------------
-    // CONNECTED + SPEAKING
-    // Pressing mic stops the assistant.
+    // If assistant is speaking:
+    // stop her.
     // ----------------------------------------------------------
 
-    if (
-      connected &&
-      speaking
-    ) {
+    if (speaking) {
       stopSpeaking();
       return;
     }
 
     // ----------------------------------------------------------
-    // CONNECTED
-    // Pressing mic again turns the assistant OFF.
+    // If connected:
+    // pressing the mic again turns voice OFF.
     // ----------------------------------------------------------
 
     if (connected) {
@@ -937,8 +813,8 @@ Speak naturally to the user in their selected language.
     }
 
     // ----------------------------------------------------------
-    // NOT CONNECTED
-    // Press mic to turn it ON.
+    // Otherwise:
+    // turn voice ON.
     // ----------------------------------------------------------
 
     startVoice();
@@ -951,14 +827,12 @@ Speak naturally to the user in their selected language.
   return (
     <>
       {/* ======================================================
-          MIC BUTTON
+          VOICE BUTTON
       ====================================================== */}
 
       <button
         type="button"
-        onClick={
-          handleVoiceButton
-        }
+        onClick={handleVoiceButton}
         disabled={connecting}
         aria-label={
           connecting
@@ -990,48 +864,16 @@ Speak naturally to the user in their selected language.
           transition-all
           duration-200
 
-          select-none
-
           ${
-            connecting
-              ? `
-                cursor-wait
-                bg-indigo-600
-                text-white
-                shadow-indigo-500/40
-              `
-              : speaking
-              ? `
-                bg-green-500
-                text-white
-                shadow-green-500/50
-                ring-4
-                ring-green-200
-              `
+            speaking
+              ? "bg-green-500 text-white shadow-green-500/50 ring-4 ring-green-200"
               : listening
-              ? `
-                animate-pulse
-                bg-orange-600
-                text-white
-                shadow-orange-600/50
-                ring-4
-                ring-orange-200
-              `
+              ? "animate-pulse bg-orange-600 text-white shadow-orange-600/50 ring-4 ring-orange-200"
+              : connecting
+              ? "cursor-wait bg-indigo-600 text-white shadow-indigo-500/40"
               : connected
-              ? `
-                bg-orange-500
-                text-white
-                shadow-orange-500/40
-                ring-4
-                ring-orange-100
-              `
-              : `
-                bg-orange-500
-                text-white
-                shadow-orange-500/40
-                hover:scale-110
-                hover:bg-orange-600
-              `
+              ? "bg-red-500 text-white shadow-red-500/40 hover:scale-110"
+              : "bg-orange-500 text-white shadow-orange-500/40 hover:scale-110 hover:bg-orange-600"
           }
         `}
       >
@@ -1039,8 +881,10 @@ Speak naturally to the user in their selected language.
           ? "..."
           : speaking
           ? "🔊"
-          : connected
+          : listening
           ? "🎤"
+          : connected
+          ? "⏹"
           : "🎤"}
       </button>
 
@@ -1105,38 +949,6 @@ Speak naturally to the user in their selected language.
         )}
 
       {/* ======================================================
-          CONNECTED BUT NOT CURRENTLY SPEAKING/LISTENING
-      ====================================================== */}
-
-      {connected &&
-        !listening &&
-        !speaking &&
-        !connecting && (
-          <div
-            className="
-              fixed
-              bottom-24
-              right-6
-              z-[9998]
-
-              rounded-full
-              bg-white
-
-              px-4
-              py-2
-
-              text-sm
-              font-bold
-              text-orange-600
-
-              shadow-xl
-            "
-          >
-            🎤 Voice is on
-          </div>
-        )}
-
-      {/* ======================================================
           SPEAKING
       ====================================================== */}
 
@@ -1163,6 +975,37 @@ Speak naturally to the user in their selected language.
             "
           >
             🔊 I'm speaking
+          </div>
+        )}
+
+      {/* ======================================================
+          CONNECTED BUT QUIET
+      ====================================================== */}
+
+      {connected &&
+        !listening &&
+        !speaking && (
+          <div
+            className="
+              fixed
+              bottom-24
+              right-6
+              z-[9998]
+
+              rounded-full
+              bg-white
+
+              px-4
+              py-2
+
+              text-sm
+              font-bold
+              text-red-500
+
+              shadow-xl
+            "
+          >
+            Tap mic to turn voice off
           </div>
         )}
 
