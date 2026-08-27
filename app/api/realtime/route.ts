@@ -1,4 +1,3 @@
-import OpenAI from "openai";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -18,153 +17,380 @@ export async function POST(request: Request) {
       );
     }
 
-    const formData = await request.formData();
+    const body = await request.json();
+    const profile = body?.profile || {};
 
-    const file = formData.get("file");
+    // ============================================================
+    // PROFILE
+    // ============================================================
 
-    const language = String(
-      formData.get("language") || "English"
-    );
+    const preferredLanguage = String(
+      profile?.language || "English"
+    ).trim();
 
-    if (!(file instanceof File)) {
-      return NextResponse.json(
-        {
-          error: "No file was uploaded.",
-        },
-        {
-          status: 400,
-        }
-      );
+    const languageLower =
+      preferredLanguage.toLowerCase();
+
+    let languageName = "English";
+
+    if (
+      languageLower.includes("urdu") ||
+      languageLower.includes("اردو")
+    ) {
+      languageName = "Urdu";
+    } else if (
+      languageLower.includes("dutch") ||
+      languageLower.includes("nederlands")
+    ) {
+      languageName = "Dutch";
+    } else if (
+      languageLower.includes("arabic") ||
+      languageLower.includes("العربية")
+    ) {
+      languageName = "Arabic";
+    } else if (
+      languageLower.includes("punjabi") ||
+      languageLower.includes("ਪੰਜਾਬੀ")
+    ) {
+      languageName = "Punjabi";
+    } else if (
+      languageLower.includes("hindi") ||
+      languageLower.includes("हिन्दी") ||
+      languageLower.includes("हिंदी")
+    ) {
+      languageName = "Hindi";
+    } else if (
+      languageLower.includes("german") ||
+      languageLower.includes("deutsch")
+    ) {
+      languageName = "German";
+    } else if (
+      languageLower.includes("french") ||
+      languageLower.includes("français")
+    ) {
+      languageName = "French";
+    } else if (
+      languageLower.includes("turkish") ||
+      languageLower.includes("türkçe")
+    ) {
+      languageName = "Turkish";
+    } else if (
+      languageLower.includes("spanish") ||
+      languageLower.includes("español")
+    ) {
+      languageName = "Spanish";
     }
 
-    const bytes = await file.arrayBuffer();
+    // ============================================================
+    // INSTRUCTIONS
+    // ============================================================
 
-    const base64 = Buffer.from(bytes).toString("base64");
+    const instructions = `
+You are the friendly voice assistant inside Netherlands Guide.
 
-    const mimeType =
-      file.type || "image/jpeg";
+You are a warm, patient, friendly woman who genuinely wants
+to help the user.
 
-    const fileData =
-      `data:${mimeType};base64,${base64}`;
+You must sound natural and human.
 
-    const openai = new OpenAI({
-      apiKey,
-    });
+Never sound like a robotic call-center agent.
 
-    const prompt = `
-You are Netherlands Guide AI.
+============================================================
+USER PROFILE
+============================================================
 
-The user uploaded a Dutch government or official letter.
+Name: ${profile?.name || "Unknown"}
+Age: ${profile?.age || "Unknown"}
+City: ${profile?.city || "Unknown"}
 
-Explain the letter in ${language}.
+Preferred language:
+${languageName}
 
-Use simple, easy-to-understand language.
+============================================================
+LANGUAGE — VERY IMPORTANT
+============================================================
 
-Clearly explain:
+The user's preferred language is ${languageName}.
 
-1. Who sent the letter
-2. What the letter is about
-3. What the user needs to do
-4. Any important deadline
-5. Any payment or amount mentioned
-6. Any appointment mentioned
-7. Any documents needed
-8. What may happen if the user does nothing
-9. A short summary
+YOU MUST SPEAK ${languageName} FROM YOUR FIRST SPOKEN WORD.
 
-Important rules:
+Do NOT greet the user in English first when their preferred
+language is not English.
 
-- Do NOT invent information.
-- Only use information actually visible in the document.
-- If something is unclear or unreadable, say so.
-- Preserve important dates, amounts, names and reference numbers accurately.
-- Explain Dutch government terminology in simple English.
-- If the document appears to be from a Dutch government organization, identify the organization if it is clearly visible.
+For example:
+
+Preferred language = Urdu
+→ speak Urdu immediately.
+
+Preferred language = Dutch
+→ speak Dutch immediately.
+
+Preferred language = Arabic
+→ speak Arabic immediately.
+
+Preferred language = Hindi
+→ speak Hindi immediately.
+
+Preferred language = Punjabi
+→ speak Punjabi immediately.
+
+Continue speaking ${languageName} throughout the conversation.
+
+Only change language if the user clearly asks you to.
+
+============================================================
+PERSONALITY
+============================================================
+
+You are:
+
+- warm
+- friendly
+- patient
+- reassuring
+- natural
+- conversational
+- encouraging
+
+Imagine you are a friendly woman sitting next to the user
+and helping them figure something out.
+
+Use natural conversational phrases.
+
+Examples:
+
+"Of course, I can help you with that."
+
+"Don't worry, we'll figure it out together."
+
+"Sure! Let me help you."
+
+"Absolutely."
+
+Avoid robotic phrases such as:
+
+"How may I assist you today?"
+
+"Your request has been received."
+
+"Please provide additional information."
+
+============================================================
+VOICE CONVERSATION
+============================================================
+
+This is a REAL-TIME voice conversation.
+
+Do not wait for a send button.
+
+Listen naturally.
+
+Respond naturally.
+
+Keep spoken answers relatively short.
+
+Do not give huge paragraphs.
+
+Do not repeat the user's entire sentence.
+
+Ask a natural follow-up question when appropriate.
+
+If the user interrupts you, stop speaking and listen.
+
+============================================================
+NETHERLANDS GUIDE
+============================================================
+
+You help users with:
+
+- housing
+- Dutch phone numbers
+- documents
+- BSN
+- DigiD
+- healthcare
+- health insurance
+- money
+- banking
+- taxes
+- jobs
+- education
+- public transport
+- cars
+- driving
+- parking
+- waste
+- municipalities
+- exploring the Netherlands
+- trip planning
+- day planning
+- scanning letters
+- understanding Dutch government letters
+
+============================================================
+NAVIGATION
+============================================================
+
+You have a function called:
+
+navigate_to_page
+
+Use this function when the user clearly wants to go to
+a section of Netherlands Guide.
+
+Examples:
+
+"I want to find a house"
+→ /housing
+
+"I need help with my BSN"
+→ /documents
+
+"I want a job"
+→ /work
+
+"I need health insurance"
+→ /healthcare
+
+"I want to plan a trip"
+→ /trip-planner
+
+"I want to scan a letter"
+→ /scanner
+
+"I need help with my car"
+→ /vehicles
+
+"I need help with public transport"
+→ /transport
+
+Never mention technical details.
+
+Never say you are clicking a button.
+
+Never say you cannot navigate.
+
+Just continue the conversation naturally.
 `;
 
-    let response;
+    // ============================================================
+    // CREATE TEMPORARY REALTIME CLIENT SECRET
+    // ============================================================
 
-    /*
-     * IMAGE
-     */
+    const response = await fetch(
+      "https://api.openai.com/v1/realtime/client_secrets",
+      {
+        method: "POST",
 
-    if (mimeType.startsWith("image/")) {
-      response = await openai.responses.create({
-        model: "gpt-4.1-mini",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
 
-        input: [
-          {
-            role: "user",
+        body: JSON.stringify({
+          session: {
+            type: "realtime",
 
-            content: [
-              {
-                type: "input_text",
-                text: prompt,
+            model: "gpt-realtime",
+
+            output_modalities: ["audio"],
+
+            instructions,
+
+            audio: {
+              output: {
+                voice: "shimmer",
               },
+            },
 
+            tools: [
               {
-                type: "input_image",
-                image_url: fileData,
-                detail: "high",
+                type: "function",
+
+                name: "navigate_to_page",
+
+                description:
+                  "Navigate the Netherlands Guide application to the page that matches the user's request.",
+
+                parameters: {
+                  type: "object",
+
+                  properties: {
+                    path: {
+                      type: "string",
+
+                      enum: [
+                        "/dashboard",
+                        "/dutch-phone-number",
+                        "/housing",
+                        "/documents",
+                        "/healthcare",
+                        "/money",
+                        "/work",
+                        "/study",
+                        "/transport",
+                        "/municipality",
+                        "/vehicles",
+                        "/waste",
+                        "/explore",
+                        "/plan-day",
+                        "/trip-planner",
+                        "/scanner",
+                        "/what-do-i-do",
+                      ],
+
+                      description:
+                        "The Netherlands Guide page to navigate to.",
+                    },
+                  },
+
+                  required: ["path"],
+
+                  additionalProperties: false,
+                },
               },
             ],
+
+            tool_choice: "auto",
           },
-        ],
-      });
-    }
+        }),
+      }
+    );
 
-    /*
-     * PDF
-     */
+    const data = await response.json();
 
-    else if (mimeType === "application/pdf") {
-      response = await openai.responses.create({
-        model: "gpt-4.1-mini",
+    if (!response.ok) {
+      console.error(
+        "OpenAI client secret error:",
+        data
+      );
 
-        input: [
-          {
-            role: "user",
-
-            content: [
-              {
-                type: "input_text",
-                text: prompt,
-              },
-
-              {
-                type: "input_file",
-                filename: file.name,
-                file_data: fileData,
-              },
-            ],
-          },
-        ],
-      });
-    }
-
-    /*
-     * UNSUPPORTED FILE
-     */
-
-    else {
       return NextResponse.json(
         {
           error:
-            "Unsupported file type. Please upload an image or PDF.",
+            data?.error?.message ||
+            "Could not create realtime voice session.",
         },
         {
-          status: 400,
+          status: response.status,
         }
       );
     }
 
-    const reply = response.output_text;
+    const clientSecret =
+      data?.value ||
+      data?.client_secret?.value;
 
-    if (!reply) {
+    if (!clientSecret) {
+      console.error(
+        "No client secret:",
+        data
+      );
+
       return NextResponse.json(
         {
           error:
-            "AI returned an empty response.",
+            "OpenAI did not return a realtime client secret.",
         },
         {
           status: 500,
@@ -173,23 +399,21 @@ Important rules:
     }
 
     return NextResponse.json({
-      success: true,
-      reply,
+      client_secret: clientSecret,
+      language: languageName,
     });
   } catch (error) {
     console.error(
-      "LETTER SCANNING ERROR:",
+      "REALTIME SESSION ERROR:",
       error
     );
 
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Unknown AI error.";
-
     return NextResponse.json(
       {
-        error: message,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Could not start realtime voice assistant.",
       },
       {
         status: 500,

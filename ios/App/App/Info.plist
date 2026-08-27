@@ -38,5 +38,23 @@
 	<string>Netherlands Guide needs microphone access so you can talk to the AI voice assistant.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Netherlands Guide needs speech recognition to process your voice commands.</string>
+	<key>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;
+&lt;plist version=&quot;1.0&quot;&gt;
+&lt;string&gt;Netherway needs access to your photos so you can upload a Dutch letter for analysis.&lt;/string&gt;
+&lt;/plist&gt;
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;
+&lt;plist version=&quot;1.0&quot;&gt;
+&lt;string&gt;Netherway needs access to your photos so you can upload a Dutch letter for analysis.&lt;/string&gt;
+&lt;/plist&gt;
+</key>
+	<string></string>
+	<key>NSCameraUsageDescription</key>
+	<string>Netherway uses your camera to take photos of Dutch letters so AI can help you understand them.</string>
+	<key>LSApplicationCategoryType</key>
+	<string></string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Netherway needs access to your photos so you can upload a Dutch letter for analysis.</string>
 </dict>
 </plist>

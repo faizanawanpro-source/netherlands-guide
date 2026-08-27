@@ -6,54 +6,61 @@ import { useRouter } from "next/navigation";
 type Profile = {
   name?: string;
   age?: string;
-  profile?: string;
   city?: string;
   language?: string;
+  profile?: string;
+  hasFamily?: "yes" | "no";
+  familyMembers?: string[];
+  documents?: string[];
 };
 
-type AIResponse = {
-  reply?: string;
-  destination?: string | null;
-  error?: string;
+type RealtimeEvent = {
+  type?: string;
+  name?: string;
+  call_id?: string;
+  arguments?: string | object;
+  error?: {
+    message?: string;
+  };
 };
 
-const PAGE_ROUTES: Record<string, string> = {
-  transport: "/transport",
-  documents: "/documents",
-  healthcare: "/healthcare",
-  housing: "/housing",
-  money: "/money",
-  work: "/work",
-  study: "/study",
-  municipality: "/municipality",
-  vehicles: "/vehicles",
-  waste: "/waste",
-  phone: "/dutch-phone-number",
-  trip: "/trip-planner",
-  planner: "/plan-day",
-  scanner: "/scanner",
-  budget: "/budget-planner",
-  explore: "/explore",
-  help: "/what-do-i-do",
-};
-
-export default function VoicePage() {
+export default function VoiceAssistant() {
   const router = useRouter();
 
-  const [profile, setProfile] = useState<Profile>({});
-  const [recording, setRecording] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
+  const [profile, setProfile] =
+    useState<Profile>({});
 
-  const [transcript, setTranscript] = useState("");
-  const [reply, setReply] = useState("");
-  const [error, setError] = useState("");
+  const [connected, setConnected] =
+    useState(false);
 
-  const mediaRecorderRef =
-    useRef<MediaRecorder | null>(null);
+  const [connecting, setConnecting] =
+    useState(false);
 
-  const audioChunksRef =
-    useRef<Blob[]>([]);
+  const [listening, setListening] =
+    useState(false);
+
+  const [speaking, setSpeaking] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  const peerConnectionRef =
+    useRef<RTCPeerConnection | null>(null);
+
+  const dataChannelRef =
+    useRef<RTCDataChannel | null>(null);
+
+  const microphoneStreamRef =
+    useRef<MediaStream | null>(null);
+
+  const audioElementRef =
+    useRef<HTMLAudioElement | null>(null);
+
+  const navigationTimeoutRef =
+    useRef<ReturnType<typeof setTimeout> | null>(
+      null
+    );
 
   // ============================================================
   // LOAD PROFILE
@@ -83,1111 +90,727 @@ export default function VoicePage() {
 
   useEffect(() => {
     return () => {
-      const recorder =
-        mediaRecorderRef.current;
-
-      if (
-        recorder &&
-        recorder.state !== "inactive"
-      ) {
-        try {
-          recorder.stop();
-        } catch {}
-      }
+      disconnectVoice();
     };
   }, []);
 
   // ============================================================
-  // SPEECH LANGUAGE
+  // START VOICE
   // ============================================================
 
-  function getSpeechLanguage(
-    language?: string
-  ) {
-    switch (language) {
-      case "Nederlands":
-        return "nl-NL";
-
-      case "اردو":
-        return "ur-PK";
-
-      case "हिन्दी":
-        return "hi-IN";
-
-      case "ਪੰਜਾਬੀ":
-        return "pa-IN";
-
-      case "العربية":
-        return "ar-SA";
-
-      case "Türkçe":
-        return "tr-TR";
-
-      case "Deutsch":
-        return "de-DE";
-
-      case "Français":
-        return "fr-FR";
-
-      case "Українська":
-        return "uk-UA";
-
-      case "English":
-      default:
-        return "en-US";
-    }
-  }
-
-  // ============================================================
-  // FIND VOICE
-  // ============================================================
-
-  function findVoice(
-    language?: string
-  ): SpeechSynthesisVoice | null {
-    if (
-      typeof window === "undefined" ||
-      !("speechSynthesis" in window)
-    ) {
-      return null;
-    }
-
-    const voices =
-      window.speechSynthesis.getVoices();
-
-    if (!voices.length) {
-      return null;
-    }
-
-    const wanted =
-      getSpeechLanguage(language)
-        .toLowerCase();
-
-    const exact =
-      voices.find(
-        (voice) =>
-          voice.lang.toLowerCase() ===
-          wanted
-      );
-
-    if (exact) {
-      return exact;
-    }
-
-    const prefix =
-      wanted.split("-")[0];
-
-    return (
-      voices.find((voice) =>
-        voice.lang
-          .toLowerCase()
-          .startsWith(prefix)
-      ) || null
-    );
-  }
-
-  // ============================================================
-  // SPEAK
-  // ============================================================
-
-  function speakReply(text: string) {
-    if (
-      typeof window === "undefined" ||
-      !("speechSynthesis" in window)
-    ) {
+  async function startVoice() {
+    if (connecting || connected) {
       return;
     }
 
-    if (!text.trim()) {
-      return;
-    }
-
-    try {
-      window.speechSynthesis.cancel();
-
-      const utterance =
-        new SpeechSynthesisUtterance(
-          text
-        );
-
-      utterance.lang =
-        getSpeechLanguage(
-          profile.language
-        );
-
-      const voice =
-        findVoice(profile.language);
-
-      if (voice) {
-        utterance.voice = voice;
-      }
-
-      utterance.rate = 0.95;
-      utterance.pitch = 1;
-      utterance.volume = 1;
-
-      utterance.onstart = () => {
-        setSpeaking(true);
-
-        console.log(
-          "AI started speaking"
-        );
-      };
-
-      utterance.onend = () => {
-        setSpeaking(false);
-
-        console.log(
-          "AI finished speaking"
-        );
-      };
-
-      utterance.onerror = (
-        event
-      ) => {
-        setSpeaking(false);
-
-        console.error(
-          "Speech error:",
-          event
-        );
-      };
-
-      window.speechSynthesis.speak(
-        utterance
-      );
-    } catch (error) {
-      console.error(
-        "Speech failed:",
-        error
-      );
-
-      setSpeaking(false);
-    }
-  }
-
-  // ============================================================
-  // FIND DESTINATION FROM USER'S WORDS
-  //
-  // THIS IS THE IMPORTANT PART.
-  //
-  // The app does NOT depend on the AI deciding whether
-  // navigation should happen.
-  // ============================================================
-
-  function getDestinationFromText(
-    text: string
-  ): string | null {
-    const message =
-      text.toLowerCase().trim();
-
-    // ----------------------------------------------------------
-    // TRANSPORT
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "public transport"
-      ) ||
-      message.includes(
-        "public transportation"
-      ) ||
-      message.includes(
-        "ov-chipkaart"
-      ) ||
-      message.includes(
-        "ov chipkaart"
-      ) ||
-      message.includes("train") ||
-      message.includes("bus") ||
-      message.includes("tram") ||
-      message.includes("metro") ||
-      message.includes("ns train") ||
-      message.includes("ns") ||
-      message.includes("transport") ||
-      message.includes("travel") ||
-      message.includes("journey") ||
-      message.includes("ticket")
-    ) {
-      return PAGE_ROUTES.transport;
-    }
-
-    // ----------------------------------------------------------
-    // DOCUMENTS
-    // ----------------------------------------------------------
-
-    if (
-      message.includes("document") ||
-      message.includes("documents") ||
-      message.includes("bsn") ||
-      message.includes("digid") ||
-      message.includes("digi d") ||
-      message.includes(
-        "residence permit"
-      ) ||
-      message.includes(
-        "residence card"
-      ) ||
-      message.includes(
-        "official letter"
-      ) ||
-      message.includes(
-        "government letter"
-      ) ||
-      message.includes(
-        "government document"
-      )
-    ) {
-      return PAGE_ROUTES.documents;
-    }
-
-    // ----------------------------------------------------------
-    // HEALTHCARE
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "healthcare"
-      ) ||
-      message.includes(
-        "health care"
-      ) ||
-      message.includes(
-        "health insurance"
-      ) ||
-      message.includes(
-        "medical"
-      ) ||
-      message.includes(
-        "doctor"
-      ) ||
-      message.includes(
-        "huisarts"
-      ) ||
-      message.includes(
-        "hospital"
-      ) ||
-      message.includes(
-        "dentist"
-      )
-    ) {
-      return PAGE_ROUTES.healthcare;
-    }
-
-    // ----------------------------------------------------------
-    // HOUSING
-    // ----------------------------------------------------------
-
-    if (
-      message.includes("housing") ||
-      message.includes(
-        "apartment"
-      ) ||
-      message.includes(
-        "rental"
-      ) ||
-      message.includes(
-        "renting"
-      ) ||
-      message.includes(
-        "rent a house"
-      ) ||
-      message.includes(
-        "find a house"
-      ) ||
-      message.includes(
-        "find a room"
-      ) ||
-      message.includes(
-        "room to rent"
-      )
-    ) {
-      return PAGE_ROUTES.housing;
-    }
-
-    // ----------------------------------------------------------
-    // MONEY
-    // ----------------------------------------------------------
-
-    if (
-      message.includes("money") ||
-      message.includes("bank") ||
-      message.includes(
-        "banking"
-      ) ||
-      message.includes(
-        "tax"
-      ) ||
-      message.includes(
-        "belasting"
-      ) ||
-      message.includes(
-        "salary"
-      ) ||
-      message.includes(
-        "payment"
-      )
-    ) {
-      return PAGE_ROUTES.money;
-    }
-
-    // ----------------------------------------------------------
-    // MUNICIPALITY
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "municipality"
-      ) ||
-      message.includes(
-        "gemeente"
-      ) ||
-      message.includes(
-        "town hall"
-      ) ||
-      message.includes(
-        "register with municipality"
-      ) ||
-      message.includes(
-        "registration at gemeente"
-      )
-    ) {
-      return PAGE_ROUTES.municipality;
-    }
-
-    // ----------------------------------------------------------
-    // WORK
-    // ----------------------------------------------------------
-
-    if (
-      message.includes("job") ||
-      message.includes("jobs") ||
-      message.includes("work") ||
-      message.includes(
-        "employment"
-      ) ||
-      message.includes(
-        "employer"
-      ) ||
-      message.includes(
-        "working"
-      ) ||
-      message.includes(
-        "find a job"
-      )
-    ) {
-      return PAGE_ROUTES.work;
-    }
-
-    // ----------------------------------------------------------
-    // STUDY
-    // ----------------------------------------------------------
-
-    if (
-      message.includes("study") ||
-      message.includes("school") ||
-      message.includes("student") ||
-      message.includes(
-        "education"
-      ) ||
-      message.includes("course") ||
-      message.includes(
-        "university"
-      ) ||
-      message.includes("mbo") ||
-      message.includes("hbo")
-    ) {
-      return PAGE_ROUTES.study;
-    }
-
-    // ----------------------------------------------------------
-    // WASTE
-    // ----------------------------------------------------------
-
-    if (
-      message.includes("waste") ||
-      message.includes(
-        "garbage"
-      ) ||
-      message.includes(
-        "trash"
-      ) ||
-      message.includes(
-        "recycling"
-      ) ||
-      message.includes(
-        "recycle"
-      )
-    ) {
-      return PAGE_ROUTES.waste;
-    }
-
-    // ----------------------------------------------------------
-    // VEHICLES
-    // ----------------------------------------------------------
-
-    if (
-      message.includes("vehicle") ||
-      message.includes("car") ||
-      message.includes(
-        "driving"
-      ) ||
-      message.includes(
-        "driving license"
-      ) ||
-      message.includes(
-        "driving licence"
-      ) ||
-      message.includes(
-        "parking"
-      )
-    ) {
-      return PAGE_ROUTES.vehicles;
-    }
-
-    // ----------------------------------------------------------
-    // DUTCH PHONE
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "phone number"
-      ) ||
-      message.includes(
-        "dutch phone"
-      ) ||
-      message.includes(
-        "sim card"
-      ) ||
-      message.includes(
-        "simcard"
-      ) ||
-      message.includes(
-        "dutch sim"
-      )
-    ) {
-      return PAGE_ROUTES.phone;
-    }
-
-    // ----------------------------------------------------------
-    // TRIP
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "trip planner"
-      ) ||
-      message.includes(
-        "plan a trip"
-      ) ||
-      message.includes(
-        "plan my trip"
-      ) ||
-      message.includes(
-        "itinerary"
-      )
-    ) {
-      return PAGE_ROUTES.trip;
-    }
-
-    // ----------------------------------------------------------
-    // DAY PLANNER
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "plan my day"
-      ) ||
-      message.includes(
-        "day planner"
-      ) ||
-      message.includes(
-        "what should i do today"
-      )
-    ) {
-      return PAGE_ROUTES.planner;
-    }
-
-    // ----------------------------------------------------------
-    // SCANNER
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "scan a letter"
-      ) ||
-      message.includes(
-        "scan this letter"
-      ) ||
-      message.includes(
-        "scanner"
-      )
-    ) {
-      return PAGE_ROUTES.scanner;
-    }
-
-    // ----------------------------------------------------------
-    // BUDGET
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "budget"
-      ) ||
-      message.includes(
-        "expenses"
-      ) ||
-      message.includes(
-        "spending"
-      )
-    ) {
-      return PAGE_ROUTES.budget;
-    }
-
-    // ----------------------------------------------------------
-    // DAILY HELP
-    // ----------------------------------------------------------
-
-    if (
-      message.includes(
-        "what do i do"
-      ) ||
-      message.includes(
-        "what should i do"
-      )
-    ) {
-      return PAGE_ROUTES.help;
-    }
-
-    return null;
-  }
-
-  // ============================================================
-  // NAVIGATE
-  // ============================================================
-
-  function navigateTo(
-    destination: string
-  ) {
-    if (
-      !destination ||
-      !destination.startsWith("/")
-    ) {
-      return;
-    }
-
-    console.log(
-      "NAVIGATING TO:",
-      destination
-    );
-
-    try {
-      /*
-       * Next.js navigation.
-       *
-       * This is the correct navigation method for
-       * pages inside the Next.js app.
-       */
-
-      router.push(destination);
-
-      /*
-       * Refresh the router so the new page is rendered.
-       */
-
-      router.refresh();
-    } catch (error) {
-      console.error(
-        "Router navigation failed:",
-        error
-      );
-
-      /*
-       * Last-resort navigation.
-       */
-
-      window.location.assign(
-        destination
-      );
-    }
-  }
-
-  // ============================================================
-  // START RECORDING
-  // ============================================================
-
-  async function startRecording() {
     setError("");
-    setReply("");
-    setTranscript("");
-    setSpeaking(false);
+    setConnecting(true);
 
     try {
-      if (
-        !navigator.mediaDevices ||
-        !navigator.mediaDevices
-          .getUserMedia
-      ) {
+      // ========================================================
+      // MICROPHONE
+      // ========================================================
+
+      const microphoneStream =
+        await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1,
+          },
+        });
+
+      microphoneStreamRef.current =
+        microphoneStream;
+
+      // ========================================================
+      // GET TEMPORARY CLIENT SECRET
+      // ========================================================
+
+      const tokenResponse =
+        await fetch("/api/realtime", {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          body: JSON.stringify({
+            profile,
+          }),
+        });
+
+      const tokenData =
+        await tokenResponse.json();
+
+      if (!tokenResponse.ok) {
         throw new Error(
-          "Microphone access is not available on this device."
+          tokenData?.error ||
+            "Could not create voice session."
         );
       }
 
-      if (
-        typeof MediaRecorder ===
-        "undefined"
-      ) {
+      const ephemeralKey =
+        tokenData?.client_secret;
+
+      if (!ephemeralKey) {
         throw new Error(
-          "Voice recording is not supported on this device."
+          "No realtime client secret was returned."
         );
       }
 
-      const stream =
-        await navigator.mediaDevices.getUserMedia(
-          {
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-            },
+      // ========================================================
+      // PEER CONNECTION
+      // ========================================================
+
+      const peerConnection =
+        new RTCPeerConnection();
+
+      peerConnectionRef.current =
+        peerConnection;
+
+      // ========================================================
+      // AUDIO OUTPUT
+      // ========================================================
+
+      const audioElement =
+        document.createElement("audio");
+
+      audioElement.autoplay = true;
+      audioElement.setAttribute(
+        "playsinline",
+        "true"
+      );
+
+      audioElement.volume = 1;
+
+      audioElementRef.current =
+        audioElement;
+
+      peerConnection.ontrack =
+        (event) => {
+          const remoteStream =
+            event.streams[0];
+
+          if (
+            audioElementRef.current
+          ) {
+            audioElementRef.current.srcObject =
+              remoteStream;
+
+            audioElementRef.current
+              .play()
+              .catch((error) => {
+                console.warn(
+                  "Audio playback was blocked:",
+                  error
+                );
+              });
           }
-        );
+        };
 
-      let mimeType = "";
-
-      const supportedTypes = [
-        "audio/mp4",
-        "audio/webm;codecs=opus",
-        "audio/webm",
-      ];
+      // ========================================================
+      // MICROPHONE TRACK
+      // ========================================================
 
       for (
-        const type of supportedTypes
+        const track of microphoneStream.getTracks()
       ) {
-        if (
-          MediaRecorder.isTypeSupported(
-            type
-          )
-        ) {
-          mimeType = type;
-          break;
-        }
+        peerConnection.addTrack(
+          track,
+          microphoneStream
+        );
       }
 
-      const recorder =
-        mimeType
-          ? new MediaRecorder(
-              stream,
-              { mimeType }
-            )
-          : new MediaRecorder(
-              stream
+      // ========================================================
+      // DATA CHANNEL
+      // ========================================================
+
+      const dataChannel =
+        peerConnection.createDataChannel(
+          "oai-events"
+        );
+
+      dataChannelRef.current =
+        dataChannel;
+
+      dataChannel.onopen = () => {
+        console.log(
+          "Realtime data channel connected."
+        );
+
+        setConnected(true);
+        setConnecting(false);
+
+        // ======================================================
+        // FIRST GREETING
+        // ======================================================
+
+        sendEvent({
+          type: "response.create",
+
+          response: {
+            instructions: `
+Start the conversation now.
+
+Greet the user warmly and naturally.
+
+IMPORTANT:
+Speak in the user's preferred language from the session instructions.
+
+Do not start in English if their preferred language is different.
+
+Keep the greeting short and friendly.
+
+Do not explain that you are an AI.
+`,
+          },
+        });
+      };
+
+      dataChannel.onmessage =
+        (event) => {
+          try {
+            const serverEvent =
+              JSON.parse(event.data) as RealtimeEvent;
+
+            handleRealtimeEvent(
+              serverEvent
             );
+          } catch (error) {
+            console.error(
+              "Could not parse realtime event:",
+              error
+            );
+          }
+        };
 
-      mediaRecorderRef.current =
-        recorder;
-
-      audioChunksRef.current = [];
-
-      recorder.ondataavailable = (
-        event
-      ) => {
-        if (
-          event.data &&
-          event.data.size > 0
-        ) {
-          audioChunksRef.current.push(
-            event.data
+      dataChannel.onerror =
+        (event) => {
+          console.error(
+            "Realtime data channel error:",
+            event
           );
-        }
-      };
-
-      recorder.onerror = (
-        event
-      ) => {
-        console.error(
-          "Recorder error:",
-          event
-        );
-
-        stream
-          .getTracks()
-          .forEach((track) =>
-            track.stop()
-          );
-
-        setRecording(false);
-        setProcessing(false);
-
-        setError(
-          "There was a problem recording your voice."
-        );
-      };
-
-      recorder.onstop = async () => {
-        stream
-          .getTracks()
-          .forEach((track) =>
-            track.stop()
-          );
-
-        const actualType =
-          recorder.mimeType ||
-          mimeType ||
-          "audio/mp4";
-
-        const audioBlob =
-          new Blob(
-            audioChunksRef.current,
-            {
-              type: actualType,
-            }
-          );
-
-        mediaRecorderRef.current =
-          null;
-
-        if (audioBlob.size === 0) {
-          setProcessing(false);
 
           setError(
-            "No audio was recorded. Please try again."
+            "The voice connection encountered a problem."
+          );
+        };
+
+      // ========================================================
+      // CONNECTION STATE
+      // ========================================================
+
+      peerConnection.onconnectionstatechange =
+        () => {
+          console.log(
+            "Connection state:",
+            peerConnection.connectionState
           );
 
-          return;
-        }
+          switch (
+            peerConnection.connectionState
+          ) {
+            case "connected":
+              setConnected(true);
+              setConnecting(false);
+              break;
 
-        await transcribeAudio(
-          audioBlob
-        );
-      };
+            case "failed":
+            case "disconnected":
+            case "closed":
+              setConnected(false);
+              setConnecting(false);
+              setListening(false);
+              setSpeaking(false);
+              break;
 
-      recorder.start();
-
-      setRecording(true);
-
-      console.log(
-        "Recording started:",
-        recorder.mimeType
-      );
-    } catch (error) {
-      console.error(
-        "Microphone error:",
-        error
-      );
-
-      setRecording(false);
-
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Could not access the microphone."
-      );
-    }
-  }
-
-  // ============================================================
-  // STOP RECORDING
-  // ============================================================
-
-  function stopRecording() {
-    const recorder =
-      mediaRecorderRef.current;
-
-    if (!recorder) {
-      return;
-    }
-
-    if (
-      recorder.state ===
-      "recording"
-    ) {
-      setRecording(false);
-      setProcessing(true);
-
-      recorder.stop();
-    }
-  }
-
-  // ============================================================
-  // TRANSCRIBE
-  // ============================================================
-
-  async function transcribeAudio(
-    audioBlob: Blob
-  ) {
-    try {
-      setProcessing(true);
-      setError("");
-
-      const extension =
-        audioBlob.type.includes(
-          "webm"
-        )
-          ? "webm"
-          : "mp4";
-
-      const audioFile =
-        new File(
-          [audioBlob],
-          `voice.${extension}`,
-          {
-            type:
-              audioBlob.type ||
-              "audio/mp4",
+            default:
+              break;
           }
-        );
+        };
 
-      const formData =
-        new FormData();
+      // ========================================================
+      // CREATE OFFER
+      // ========================================================
 
-      formData.append(
-        "audio",
-        audioFile
+      const offer =
+        await peerConnection.createOffer();
+
+      await peerConnection.setLocalDescription(
+        offer
       );
 
-      const response =
-        await fetch(
-          "/api/transcribe",
-          {
-            method: "POST",
-            body: formData,
-          }
-        );
-
-      const data =
-        await response.json();
-
-      if (!response.ok) {
+      if (!offer.sdp) {
         throw new Error(
-          data?.error ||
-            "Could not transcribe your voice."
+          "Could not create the WebRTC offer."
         );
       }
 
-      const text =
-        data?.text?.trim();
+      // ========================================================
+      // CONNECT TO OPENAI REALTIME
+      // ========================================================
 
-      if (!text) {
-        throw new Error(
-          "I couldn't understand what you said. Please try again."
-        );
-      }
-
-      setTranscript(text);
-
-      console.log(
-        "TRANSCRIPT:",
-        text
-      );
-
-      await askAI(text);
-    } catch (error) {
-      console.error(
-        "Transcription error:",
-        error
-      );
-
-      setProcessing(false);
-
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Could not understand your voice."
-      );
-    }
-  }
-
-  // ============================================================
-  // ASK AI
-  // ============================================================
-
-  async function askAI(
-    text: string
-  ) {
-    try {
-      setProcessing(true);
-      setError("");
-
-      /*
-       * FIRST:
-       * Determine the page from the user's actual words.
-       *
-       * This is the most reliable navigation decision.
-       */
-
-      const userDestination =
-        getDestinationFromText(text);
-
-      console.log(
-        "USER DESTINATION:",
-        userDestination
-      );
-
-      const response =
+      const realtimeResponse =
         await fetch(
-          "/api/chat",
+          "https://api.openai.com/v1/realtime/calls",
           {
             method: "POST",
 
             headers: {
+              Authorization:
+                `Bearer ${ephemeralKey}`,
+
               "Content-Type":
-                "application/json",
+                "application/sdp",
             },
 
-            body: JSON.stringify({
-              message: text,
-              profile,
-              conversation: [],
-            }),
+            body: offer.sdp,
           }
         );
 
-      const data: AIResponse =
-        await response.json();
+      if (!realtimeResponse.ok) {
+        const errorText =
+          await realtimeResponse.text();
 
-      console.log(
-        "AI RESPONSE:",
-        data
+        console.error(
+          "Realtime connection failed:",
+          errorText
+        );
+
+        throw new Error(
+          "Could not connect to the realtime voice service."
+        );
+      }
+
+      const answerSdp =
+        await realtimeResponse.text();
+
+      await peerConnection.setRemoteDescription(
+        {
+          type: "answer",
+          sdp: answerSdp,
+        }
       );
 
-      if (!response.ok) {
-        throw new Error(
-          data?.error ||
-            "The AI could not respond."
-        );
-      }
-
-      let aiReply =
-        data.reply?.trim();
-
-      if (!aiReply) {
-        throw new Error(
-          "The AI returned an empty response."
-        );
-      }
-
-      /*
-       * IMPORTANT:
-       *
-       * If the AI says something like:
-       *
-       * "I can't open buttons..."
-       *
-       * but WE KNOW the user asked about a page,
-       * replace that useless response with something
-       * natural.
-       */
-
-      const cannotNavigate =
-        /can't (open|press|click|navigate)|cannot (open|press|click|navigate)|can't access|cannot access|can't open icons|cannot open icons/i.test(
-          aiReply
-        );
-
-      if (
-        userDestination &&
-        cannotNavigate
-      ) {
-        aiReply =
-          "Absolutely. Let me take you there.";
-      }
-
-      setReply(aiReply);
-
-      /*
-       * IMPORTANT:
-       *
-       * USER DESTINATION gets priority.
-       *
-       * This means:
-       *
-       * "I need help with public transport"
-       *
-       * ALWAYS goes to:
-       *
-       * /transport
-       *
-       * even if the AI accidentally returns NONE.
-       */
-
-      const destination =
-        userDestination ||
-        (data.destination &&
-        data.destination.startsWith("/")
-          ? data.destination
-          : null);
-
       console.log(
-        "FINAL DESTINATION:",
-        destination
+        "Realtime voice connection established."
       );
-
-      setProcessing(false);
-
-      /*
-       * START SPEAKING FIRST.
-       */
-
-      speakReply(aiReply);
-
-      /*
-       * THEN NAVIGATE.
-       *
-       * 900ms gives iPhone enough time to start
-       * the speech before the page changes.
-       */
-
-      if (destination) {
-        setTimeout(() => {
-          console.log(
-            "EXECUTING NAVIGATION:",
-            destination
-          );
-
-          navigateTo(destination);
-        }, 900);
-      }
     } catch (error) {
       console.error(
-        "AI error:",
+        "Voice startup error:",
         error
       );
 
-      setProcessing(false);
+      // Clean up microphone if startup fails.
+
+      microphoneStreamRef.current
+        ?.getTracks()
+        .forEach((track) => {
+          track.stop();
+        });
+
+      microphoneStreamRef.current =
+        null;
+
+      setConnecting(false);
+      setConnected(false);
+      setListening(false);
+      setSpeaking(false);
 
       setError(
         error instanceof Error
           ? error.message
-          : "The AI could not respond."
+          : "Could not start the voice assistant."
       );
     }
   }
 
   // ============================================================
-  // VOICE BUTTON
+  // REALTIME EVENTS
+  // ============================================================
+
+  function handleRealtimeEvent(
+    event: RealtimeEvent
+  ) {
+    console.log(
+      "Realtime event:",
+      event.type
+    );
+
+    switch (event.type) {
+      // ========================================================
+      // USER STARTED SPEAKING
+      // ========================================================
+
+      case "input_audio_buffer.speech_started":
+        setListening(true);
+        setSpeaking(false);
+        break;
+
+      // ========================================================
+      // USER STOPPED SPEAKING
+      // ========================================================
+
+      case "input_audio_buffer.speech_stopped":
+        setListening(false);
+        break;
+
+      // ========================================================
+      // ASSISTANT SPEAKING
+      // ========================================================
+
+      case "response.audio.delta":
+        setSpeaking(true);
+        setListening(false);
+        break;
+
+      // ========================================================
+      // ASSISTANT FINISHED
+      // ========================================================
+
+      case "response.audio.done":
+        setSpeaking(false);
+        break;
+
+      case "response.done":
+        setSpeaking(false);
+        break;
+
+      // ========================================================
+      // NAVIGATION FUNCTION
+      // ========================================================
+
+      case "response.function_call_arguments.done":
+        handleFunctionCall(event);
+        break;
+
+      // ========================================================
+      // ERROR
+      // ========================================================
+
+      case "error":
+        console.error(
+          "Realtime API error:",
+          event
+        );
+
+        setError(
+          event.error?.message ||
+            "The voice assistant encountered an error."
+        );
+
+        setSpeaking(false);
+        setListening(false);
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  // ============================================================
+  // HANDLE NAVIGATION
+  // ============================================================
+
+  function handleFunctionCall(
+    event: RealtimeEvent
+  ) {
+    if (
+      event.name !==
+      "navigate_to_page"
+    ) {
+      return;
+    }
+
+    try {
+      const args =
+        typeof event.arguments ===
+        "string"
+          ? JSON.parse(
+              event.arguments
+            )
+          : event.arguments;
+
+      const destination =
+        (args as { path?: string })
+          ?.path;
+
+      if (
+        typeof destination !==
+          "string" ||
+        !destination.startsWith("/")
+      ) {
+        return;
+      }
+
+      console.log(
+        "AI NAVIGATION:",
+        destination
+      );
+
+      // ========================================================
+      // TELL REALTIME FUNCTION SUCCEEDED
+      // ========================================================
+
+      sendEvent({
+        type:
+          "conversation.item.create",
+
+        item: {
+          type:
+            "function_call_output",
+
+          call_id:
+            event.call_id,
+
+          output:
+            JSON.stringify({
+              success: true,
+              path: destination,
+            }),
+        },
+      });
+
+      // ========================================================
+      // LET ASSISTANT CONTINUE TALKING
+      // ========================================================
+
+      sendEvent({
+        type: "response.create",
+
+        response: {
+          instructions: `
+Continue naturally after navigating.
+
+Do not mention technical details.
+
+Do not say "I clicked the button".
+
+Simply continue the conversation naturally.
+`,
+        },
+      });
+
+      // ========================================================
+      // NAVIGATE
+      // ========================================================
+
+      if (
+        navigationTimeoutRef.current
+      ) {
+        clearTimeout(
+          navigationTimeoutRef.current
+        );
+      }
+
+      navigationTimeoutRef.current =
+        setTimeout(() => {
+          router.push(
+            destination
+          );
+        }, 700);
+    } catch (error) {
+      console.error(
+        "Navigation function error:",
+        error
+      );
+    }
+  }
+
+  // ============================================================
+  // SEND EVENT
+  // ============================================================
+
+  function sendEvent(
+    event: unknown
+  ) {
+    const channel =
+      dataChannelRef.current;
+
+    if (
+      !channel ||
+      channel.readyState !==
+        "open"
+    ) {
+      console.warn(
+        "Realtime data channel is not ready."
+      );
+
+      return;
+    }
+
+    channel.send(
+      JSON.stringify(event)
+    );
+  }
+
+  // ============================================================
+  // STOP ASSISTANT SPEAKING
+  // ============================================================
+
+  function stopSpeaking() {
+    if (!connected) {
+      return;
+    }
+
+    sendEvent({
+      type:
+        "response.cancel",
+    });
+
+    setSpeaking(false);
+  }
+
+  // ============================================================
+  // DISCONNECT
+  // ============================================================
+
+  function disconnectVoice() {
+    try {
+      // --------------------------------------------------------
+      // Navigation timeout
+      // --------------------------------------------------------
+
+      if (
+        navigationTimeoutRef.current
+      ) {
+        clearTimeout(
+          navigationTimeoutRef.current
+        );
+
+        navigationTimeoutRef.current =
+          null;
+      }
+
+      // --------------------------------------------------------
+      // Data channel
+      // --------------------------------------------------------
+
+      const channel =
+        dataChannelRef.current;
+
+      if (channel) {
+        try {
+          channel.close();
+        } catch {}
+      }
+
+      // --------------------------------------------------------
+      // Microphone
+      // --------------------------------------------------------
+
+      const microphoneStream =
+        microphoneStreamRef.current;
+
+      if (microphoneStream) {
+        microphoneStream
+          .getTracks()
+          .forEach((track) => {
+            try {
+              track.stop();
+            } catch {}
+          });
+      }
+
+      // --------------------------------------------------------
+      // Peer connection
+      // --------------------------------------------------------
+
+      const peerConnection =
+        peerConnectionRef.current;
+
+      if (peerConnection) {
+        try {
+          peerConnection
+            .getSenders()
+            .forEach((sender) => {
+              try {
+                sender.track?.stop();
+              } catch {}
+            });
+        } catch {}
+
+        try {
+          peerConnection.close();
+        } catch {}
+      }
+
+      // --------------------------------------------------------
+      // Audio
+      // --------------------------------------------------------
+
+      const audioElement =
+        audioElementRef.current;
+
+      if (audioElement) {
+        try {
+          audioElement.pause();
+        } catch {}
+
+        audioElement.srcObject =
+          null;
+      }
+    } catch (error) {
+      console.error(
+        "Voice cleanup error:",
+        error
+      );
+    }
+
+    peerConnectionRef.current =
+      null;
+
+    dataChannelRef.current =
+      null;
+
+    microphoneStreamRef.current =
+      null;
+
+    audioElementRef.current =
+      null;
+
+    setConnected(false);
+    setConnecting(false);
+    setListening(false);
+    setSpeaking(false);
+  }
+
+  // ============================================================
+  // MAIN BUTTON
   // ============================================================
 
   function handleVoiceButton() {
-    if (processing) {
+    setError("");
+
+    // ----------------------------------------------------------
+    // CONNECTING
+    // ----------------------------------------------------------
+
+    if (connecting) {
       return;
     }
 
-    if (recording) {
-      stopRecording();
+    // ----------------------------------------------------------
+    // CONNECTED
+    //
+    // Pressing the SAME MIC BUTTON turns the assistant OFF.
+    // ----------------------------------------------------------
+
+    if (connected) {
+      disconnectVoice();
       return;
     }
 
-    if (speaking) {
-      try {
-        window.speechSynthesis.cancel();
-      } catch {}
+    // ----------------------------------------------------------
+    // OFF
+    //
+    // Pressing the mic turns it ON.
+    // ----------------------------------------------------------
 
-      setSpeaking(false);
-
-      return;
-    }
-
-    startRecording();
+    startVoice();
   }
 
   // ============================================================
@@ -1195,199 +818,187 @@ export default function VoicePage() {
   // ============================================================
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-white/10">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-5">
-          <button
-            type="button"
-            onClick={() =>
-              navigateTo("/dashboard")
-            }
-            className="font-bold text-slate-300 transition hover:text-white"
-          >
-            ← Dashboard
-          </button>
+    <>
+      {/* ======================================================
+          MIC BUTTON
+      ====================================================== */}
 
-          <div className="font-black">
-            🇳🇱 Netherlands Guide
-          </div>
-        </div>
-      </header>
+      <button
+        type="button"
+        onClick={handleVoiceButton}
+        disabled={connecting}
+        aria-label={
+          connected
+            ? "Turn voice assistant off"
+            : "Turn voice assistant on"
+        }
+        className={`
+          fixed
+          bottom-6
+          right-6
+          z-[9999]
 
-      <section className="mx-auto flex min-h-[calc(100vh-80px)] max-w-3xl flex-col items-center justify-center px-6 py-12">
-        <p className="text-sm font-black uppercase tracking-[0.25em] text-orange-400">
-          AI Voice Assistant
-        </p>
+          flex
+          h-16
+          w-16
+          items-center
+          justify-center
 
-        <h1 className="mt-4 text-center text-4xl font-black sm:text-6xl">
-          Just talk to me.
-        </h1>
+          rounded-full
 
-        <p className="mt-5 max-w-xl text-center text-lg leading-8 text-slate-400">
-          Speak naturally. I'll listen,
-          understand you, and help you
-          with everyday life in the
-          Netherlands.
-        </p>
+          text-3xl
 
-        {/* VOICE BUTTON */}
+          shadow-2xl
 
-        <button
-          type="button"
-          onClick={
-            handleVoiceButton
-          }
-          disabled={processing}
-          aria-label={
-            recording
-              ? "Stop recording"
-              : speaking
-              ? "Stop speaking"
-              : "Start voice assistant"
-          }
-          className={`
-            mt-12 flex h-40 w-40
-            items-center justify-center
-            rounded-full
-            text-6xl
-            shadow-2xl
-            transition
-            ${
-              recording
-                ? "animate-pulse bg-red-500"
+          transition-all
+          duration-200
+
+          ${
+            connected
+              ? listening
+                ? "animate-pulse bg-orange-600 text-white shadow-orange-600/50 ring-4 ring-orange-200"
                 : speaking
-                ? "bg-green-500"
-                : processing
-                ? "cursor-wait bg-indigo-600"
-                : "bg-orange-500 hover:scale-105 hover:bg-orange-600"
-            }
-          `}
+                ? "bg-green-500 text-white shadow-green-500/50 ring-4 ring-green-200"
+                : "bg-orange-500 text-white shadow-orange-500/40"
+              : connecting
+              ? "cursor-wait bg-indigo-600 text-white shadow-indigo-500/40"
+              : "bg-orange-500 text-white shadow-orange-500/40 hover:scale-110 hover:bg-orange-600"
+          }
+        `}
+      >
+        {connecting
+          ? "..."
+          : speaking
+          ? "🔊"
+          : connected
+          ? "🎤"
+          : "🎤"}
+      </button>
+
+      {/* ======================================================
+          CONNECTING
+      ====================================================== */}
+
+      {connecting && (
+        <div
+          className="
+            fixed
+            bottom-24
+            right-6
+            z-[9998]
+
+            rounded-full
+            bg-white
+
+            px-4
+            py-2
+
+            text-sm
+            font-bold
+            text-indigo-600
+
+            shadow-xl
+          "
         >
-          {recording
-            ? "🔴"
-            : speaking
-            ? "🔊"
-            : processing
-            ? "🤖"
-            : "🎤"}
-        </button>
-
-        {/* STATUS */}
-
-        <div className="mt-8 text-center">
-          {recording && (
-            <div>
-              <p className="font-bold text-red-400">
-                🔴 I'm listening
-              </p>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Tap the button when
-                you're finished.
-              </p>
-            </div>
-          )}
-
-          {processing && (
-            <div>
-              <p className="font-bold text-indigo-400">
-                🤖 Thinking...
-              </p>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Give me a moment.
-              </p>
-            </div>
-          )}
-
-          {speaking &&
-            !processing && (
-              <div>
-                <p className="font-bold text-green-400">
-                  🟢 I'm speaking
-                </p>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Tap the button to stop.
-                </p>
-              </div>
-            )}
-
-          {!recording &&
-            !processing &&
-            !speaking && (
-              <p className="text-slate-500">
-                Tap 🎤 to start talking
-              </p>
-            )}
+          Connecting...
         </div>
+      )}
 
-        {/* TRANSCRIPT */}
+      {/* ======================================================
+          LISTENING
+      ====================================================== */}
 
-        {transcript && (
-          <div className="mt-10 w-full rounded-2xl border border-white/10 bg-white/5 p-5">
-            <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-              You said
-            </p>
+      {connected &&
+        listening &&
+        !speaking && (
+          <div
+            className="
+              fixed
+              bottom-24
+              right-6
+              z-[9998]
 
-            <p className="mt-2 leading-7 text-slate-200">
-              {transcript}
-            </p>
-          </div>
-        )}
+              rounded-full
+              bg-white
 
-        {/* AI RESPONSE */}
+              px-4
+              py-2
 
-        {reply && (
-          <div className="mt-4 w-full rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5">
-            <p className="text-xs font-black uppercase tracking-wider text-orange-400">
-              Netherlands Guide
-            </p>
+              text-sm
+              font-bold
+              text-orange-600
 
-            <p className="mt-2 leading-7 text-slate-200">
-              {reply}
-            </p>
-          </div>
-        )}
-
-        {/* ERROR */}
-
-        {error && (
-          <div className="mt-8 w-full rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-center">
-            <p className="text-sm font-bold text-red-300">
-              {error}
-            </p>
-          </div>
-        )}
-
-        {/* LANGUAGE */}
-
-        <div className="mt-10 text-center text-xs text-slate-600">
-          AI voice language:
-          <span className="ml-1 font-bold text-slate-500">
-            {profile.language ||
-              "English"}
-          </span>
-        </div>
-
-        {/* STOP SPEAKING */}
-
-        {speaking && (
-          <button
-            type="button"
-            onClick={() => {
-              try {
-                window.speechSynthesis.cancel();
-              } catch {}
-
-              setSpeaking(false);
-            }}
-            className="mt-6 rounded-xl bg-white/10 px-5 py-3 text-sm font-bold transition hover:bg-white/20"
+              shadow-xl
+            "
           >
-            Stop speaking
-          </button>
+            🎤 I'm listening
+          </div>
         )}
-      </section>
-    </main>
+
+      {/* ======================================================
+          SPEAKING
+      ====================================================== */}
+
+      {connected &&
+        speaking && (
+          <div
+            className="
+              fixed
+              bottom-24
+              right-6
+              z-[9998]
+
+              rounded-full
+              bg-white
+
+              px-4
+              py-2
+
+              text-sm
+              font-bold
+              text-green-600
+
+              shadow-xl
+            "
+          >
+            🔊 I'm speaking
+          </div>
+        )}
+
+      {/* ======================================================
+          ERROR
+      ====================================================== */}
+
+      {error && (
+        <div
+          className="
+            fixed
+            bottom-24
+            right-6
+            z-[9998]
+
+            max-w-xs
+
+            rounded-2xl
+
+            border
+            border-red-200
+
+            bg-white
+
+            px-4
+            py-3
+
+            text-sm
+            font-semibold
+            text-red-600
+
+            shadow-xl
+          "
+        >
+          {error}
+        </div>
+      )}
+    </>
   );
 }

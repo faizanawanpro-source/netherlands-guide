@@ -11,47 +11,33 @@ export async function POST(request: Request) {
         {
           error: "OPENAI_API_KEY is missing.",
         },
-        {
-          status: 500,
-        }
+        { status: 500 }
       );
     }
 
     const formData = await request.formData();
 
     const image = formData.get("image");
-
     const language = String(
       formData.get("language") || "English"
     );
 
-    // DEBUG: Check whether a file was actually received
     if (!(image instanceof File)) {
       return NextResponse.json(
         {
-          error: "DEBUG: No valid File received.",
-          receivedType: typeof image,
-          receivedValue: image ? String(image) : null,
+          error: 'No image received. Please upload an image using the field "image".',
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    // DEBUG: Check the uploaded file
     if (!image.type.startsWith("image/")) {
       return NextResponse.json(
         {
           error:
-            "DEBUG: File received but it is not recognized as an image.",
-          fileType: image.type,
-          fileName: image.name,
-          fileSize: image.size,
+            "Please upload an image such as JPG, JPEG, PNG, or HEIC.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
@@ -62,7 +48,7 @@ export async function POST(request: Request) {
     const mimeType = image.type || "image/jpeg";
 
     const imageUrl =
-      "data:" + mimeType + ";base64," + base64;
+      `data:${mimeType};base64,${base64}`;
 
     const openAIResponse = await fetch(
       "https://api.openai.com/v1/responses",
@@ -70,7 +56,7 @@ export async function POST(request: Request) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Bearer " + apiKey,
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           model: "gpt-4.1-mini",
@@ -81,27 +67,30 @@ export async function POST(request: Request) {
                 {
                   type: "input_text",
                   text:
-                    "You are Netherlands Guide AI.\n\n" +
-                    "The user uploaded an official Dutch letter.\n\n" +
-                    "Read the letter carefully and explain it in " +
-                    language +
-                    " using very simple language.\n\n" +
-                    "Explain:\n\n" +
-                    "1. Who sent the letter\n" +
-                    "2. What the letter is about\n" +
-                    "3. What the user needs to do\n" +
-                    "4. Important deadlines\n" +
-                    "5. Payments or amounts\n" +
-                    "6. Appointments\n" +
-                    "7. Documents needed\n" +
-                    "8. What happens if the user does nothing\n" +
-                    "9. A short summary\n\n" +
-                    "IMPORTANT:\n" +
-                    "- Do not invent information.\n" +
-                    "- Only use information visible in the letter.\n" +
-                    "- Keep dates and amounts accurate.\n" +
-                    "- If something cannot be read, say that it is unclear.\n" +
-                    "- Do not give legal advice.",
+                    `You are Netherlands Guide AI.
+
+The user uploaded an official Dutch letter.
+
+Read the letter carefully and explain it in ${language} using very simple language.
+
+Explain:
+
+1. Who sent the letter
+2. What the letter is about
+3. What the user needs to do
+4. Important deadlines
+5. Payments or amounts
+6. Appointments
+7. Documents needed
+8. What happens if the user does nothing
+9. A short summary
+
+IMPORTANT:
+- Do not invent information.
+- Only use information visible in the letter.
+- Keep dates and amounts accurate.
+- If something cannot be read, say that it is unclear.
+- Do not give legal advice.`,
                 },
                 {
                   type: "input_image",
@@ -114,7 +103,8 @@ export async function POST(request: Request) {
       }
     );
 
-    const responseText = await openAIResponse.text();
+    const responseText =
+      await openAIResponse.text();
 
     if (!openAIResponse.ok) {
       console.error(
@@ -137,15 +127,24 @@ export async function POST(request: Request) {
 
     let reply = "";
 
-    if (typeof data.output_text === "string") {
+    if (
+      typeof data.output_text === "string"
+    ) {
       reply = data.output_text;
     }
 
-    if (!reply && Array.isArray(data.output)) {
+    if (
+      !reply &&
+      Array.isArray(data.output)
+    ) {
       for (const item of data.output) {
-        if (Array.isArray(item.content)) {
+        if (
+          Array.isArray(item.content)
+        ) {
           for (const content of item.content) {
-            if (typeof content.text === "string") {
+            if (
+              typeof content.text === "string"
+            ) {
               reply += content.text;
             }
           }
@@ -161,17 +160,16 @@ export async function POST(request: Request) {
 
       return NextResponse.json(
         {
-          error: "AI returned no explanation.",
+          error:
+            "AI returned no explanation.",
         },
-        {
-          status: 500,
-        }
+        { status: 500 }
       );
     }
 
     return NextResponse.json({
       success: true,
-      reply: reply,
+      reply,
     });
   } catch (error) {
     console.error(
@@ -186,9 +184,7 @@ export async function POST(request: Request) {
             ? error.message
             : "Could not analyse the letter.",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }

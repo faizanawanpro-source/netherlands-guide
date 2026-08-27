@@ -25,16 +25,21 @@ export default function ScannerPage() {
       return;
     }
 
+    if (!selectedFile.type.startsWith("image/")) {
+      setError(
+        "Please upload an image of your letter, such as JPG, PNG, or HEIC."
+      );
+      setFile(null);
+      setPreview("");
+      return;
+    }
+
     setFile(selectedFile);
     setResult("");
     setError("");
 
-    if (selectedFile.type.startsWith("image/")) {
-      const imageUrl = URL.createObjectURL(selectedFile);
-      setPreview(imageUrl);
-    } else {
-      setPreview("");
-    }
+    const imageUrl = URL.createObjectURL(selectedFile);
+    setPreview(imageUrl);
   }
 
   async function scanLetter() {
@@ -50,25 +55,28 @@ export default function ScannerPage() {
     try {
       const formData = new FormData();
 
-      // IMPORTANT:
-      // The API expects "image"
       formData.append("image", file);
-
-      // Optional language
       formData.append("language", "English");
 
-      const response = await fetch("/api/scan-letter", {
-        method: "POST",
-        body: formData,
-      });
+      const response = await fetch(
+        "/api/scan-letter",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       const data = await response.json();
 
-      console.log("Scanner API response:", data);
+      console.log(
+        "Scanner API response:",
+        data
+      );
 
       if (!response.ok) {
         throw new Error(
-          data.error || `Scanner API failed (${response.status})`
+          data.error ||
+            `Scanner API failed (${response.status})`
         );
       }
 
@@ -80,12 +88,15 @@ export default function ScannerPage() {
 
       setResult(data.reply);
     } catch (err) {
-      console.error("Scanner error:", err);
+      console.error(
+        "Scanner error:",
+        err
+      );
 
       const message =
         err instanceof Error
           ? err.message
-          : "Unknown scanner error.";
+          : "Could not analyse the letter.";
 
       setError(message);
     } finally {
@@ -116,7 +127,9 @@ export default function ScannerPage() {
             href="/dashboard"
             className="flex items-center gap-3 rounded-xl px-3 py-2 font-bold transition hover:bg-slate-100"
           >
-            <span className="text-xl">←</span>
+            <span className="text-xl">
+              ←
+            </span>
 
             <div>
               <p className="font-black">
@@ -147,9 +160,9 @@ export default function ScannerPage() {
           </h1>
 
           <p className="mt-4 max-w-2xl text-base leading-7 text-white/90 sm:text-lg">
-            Take a photo or upload a Dutch letter. Netherlands
-            Guide will help you understand what it says and what
-            you may need to do.
+            Take a photo or upload a Dutch letter.
+            Netherlands Guide will help you understand
+            what it says and what you may need to do.
           </p>
 
         </section>
@@ -161,7 +174,7 @@ export default function ScannerPage() {
           <input
             ref={inputRef}
             type="file"
-            accept="image/*,.pdf"
+            accept="image/*"
             capture="environment"
             onChange={handleFileChange}
             className="hidden"
@@ -184,11 +197,11 @@ export default function ScannerPage() {
               </h2>
 
               <p className="mt-2 text-sm text-slate-500">
-                Take a photo or choose an image/PDF
+                Take a photo or choose an image
               </p>
 
               <span className="mt-6 rounded-xl bg-purple-600 px-6 py-3 font-black text-white">
-                Choose file
+                Choose photo
               </span>
 
             </button>
@@ -199,7 +212,7 @@ export default function ScannerPage() {
 
               {/* IMAGE PREVIEW */}
 
-              {preview ? (
+              {preview && (
 
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
 
@@ -211,25 +224,11 @@ export default function ScannerPage() {
 
                 </div>
 
-              ) : (
-
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 p-12 text-center">
-
-                  <div className="text-6xl">
-                    📄
-                  </div>
-
-                  <p className="mt-4 font-black">
-                    PDF uploaded
-                  </p>
-
-                </div>
-
               )}
 
               {/* FILE NAME */}
 
-              <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 p-4">
+              <div className="mt-4 flex items-center justify-between gap-4 rounded-xl bg-slate-50 p-4">
 
                 <div className="min-w-0">
 
@@ -246,35 +245,81 @@ export default function ScannerPage() {
                 <button
                   type="button"
                   onClick={removeFile}
-                  className="ml-4 rounded-lg px-3 py-2 text-sm font-bold text-red-600 hover:bg-red-50"
+                  className="shrink-0 rounded-lg px-3 py-2 text-sm font-bold text-red-600 transition hover:bg-red-50"
                 >
                   Remove
                 </button>
 
               </div>
 
-              {/* ACTIONS */}
+              {/* ERROR */}
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {error && (
 
-                <button
-                  type="button"
-                  onClick={selectFile}
-                  className="rounded-xl border border-slate-200 bg-white px-5 py-4 font-black transition hover:bg-slate-50"
-                >
-                  📷 Choose another
-                </button>
+                <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+                  {error}
+                </div>
 
-                <button
-                  type="button"
-                  onClick={scanLetter}
-                  disabled={scanning}
-                  className="rounded-xl bg-purple-600 px-5 py-4 font-black text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {scanning
-                    ? "🔄 AI is reading..."
-                    : "🤖 Scan with AI"}
-                </button>
+              )}
+
+              {/* SCAN BUTTON */}
+
+              <button
+                type="button"
+                onClick={scanLetter}
+                disabled={scanning}
+                className="mt-6 w-full rounded-2xl bg-purple-600 px-6 py-4 text-base font-black text-white shadow-lg transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+
+                {scanning
+                  ? "AI is reading your letter..."
+                  : "✨ Analyse my letter"}
+
+              </button>
+
+            </div>
+
+          )}
+
+          {/* ERROR WHEN NO FILE */}
+
+          {!file && error && (
+
+            <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+              {error}
+            </div>
+
+          )}
+
+          {/* RESULT */}
+
+          {result && (
+
+            <div className="mt-8">
+
+              <div className="rounded-2xl border border-green-200 bg-green-50 p-6">
+
+                <div className="flex items-center gap-3">
+
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-600 text-xl text-white">
+                    ✓
+                  </div>
+
+                  <div>
+                    <h2 className="text-xl font-black text-green-950">
+                      Letter explained
+                    </h2>
+
+                    <p className="text-sm text-green-700">
+                      Netherlands Guide AI
+                    </p>
+                  </div>
+
+                </div>
+
+                <div className="mt-6 whitespace-pre-wrap text-sm leading-7 text-slate-700">
+                  {result}
+                </div>
 
               </div>
 
@@ -284,66 +329,12 @@ export default function ScannerPage() {
 
         </section>
 
-        {/* ERROR */}
-
-        {error && (
-
-          <section className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-bold text-red-700">
-
-            ⚠️ Scanner error:
-
-            <p className="mt-2 font-medium">
-              {error}
-            </p>
-
-          </section>
-
-        )}
-
-        {/* RESULT */}
-
-        {result && (
-
-          <section className="mt-6 rounded-[2rem] border border-green-200 bg-green-50 p-7 shadow-sm">
-
-            <div className="flex items-center gap-3">
-
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-2xl shadow-sm">
-                🤖
-              </div>
-
-              <div>
-
-                <p className="text-xs font-black uppercase tracking-wider text-green-600">
-                  Netherlands Guide AI
-                </p>
-
-                <h2 className="text-xl font-black text-green-950">
-                  Letter explanation
-                </h2>
-
-              </div>
-
-            </div>
-
-            <p className="mt-5 whitespace-pre-wrap leading-8 text-green-950">
-              {result}
-            </p>
-
-          </section>
-
-        )}
-
         {/* HOW IT WORKS */}
 
         <section className="mt-8 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
 
-          <p className="text-sm font-black uppercase tracking-wider text-purple-600">
+          <h2 className="text-2xl font-black">
             How it works
-          </p>
-
-          <h2 className="mt-2 text-2xl font-black">
-            Understand Dutch letters more easily
           </h2>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
@@ -355,11 +346,11 @@ export default function ScannerPage() {
               </div>
 
               <h3 className="mt-3 font-black">
-                1. Upload
+                1. Take a photo
               </h3>
 
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                Take a photo or upload the letter you received.
+                Take a clear photo of your Dutch letter.
               </p>
 
             </div>
@@ -407,8 +398,7 @@ export default function ScannerPage() {
 
           AI explanations are provided for general understanding.
           For important legal, immigration, financial or healthcare
-          letters, always verify the information with the official
-          organization.
+          letters, always check the official source.
 
         </div>
 

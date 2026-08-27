@@ -14,25 +14,29 @@ export default function Home() {
       );
 
       if (savedProfile) {
-        // User already created a profile
         router.replace("/dashboard");
       } else {
-        // First-time user
         setChecking(false);
       }
     } catch (error) {
-      console.error("Could not check saved profile:", error);
+      console.error(
+        "Could not check saved profile:",
+        error
+      );
+
       setChecking(false);
     }
   }, [router]);
 
-  // Don't show the landing page while checking storage
   if (checking) {
     return (
-      <main className="min-h-screen bg-white flex items-center justify-center">
+      <main className="flex min-h-screen items-center justify-center bg-white">
         <div className="text-center">
-          <div className="text-5xl mb-4">🇳🇱</div>
-          <p className="text-slate-500 font-medium">
+          <div className="mb-4 text-5xl">
+            🇳🇱
+          </div>
+
+          <p className="font-medium text-slate-500">
             Loading Netherlands Guide...
           </p>
         </div>
@@ -41,29 +45,30 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-white flex items-center justify-center px-6">
+    <main className="flex min-h-screen items-center justify-center bg-white px-6">
       <div className="max-w-2xl text-center">
 
-        <div className="text-6xl mb-6">
+        <div className="mb-6 text-6xl">
           🇳🇱
         </div>
 
-        <h1 className="text-5xl font-bold text-gray-900 mb-6">
+        <h1 className="mb-6 text-5xl font-bold text-gray-900">
           Netherlands Guide
         </h1>
 
-        <p className="text-xl text-gray-600 mb-8">
+        <p className="mb-8 text-xl text-gray-600">
           Your personal AI guide to living in the Netherlands.
         </p>
 
-        <p className="text-gray-500 mb-10">
+        <p className="mb-10 text-gray-500">
           Get help with housing, work, documents, healthcare,
           transport and everyday life.
         </p>
 
         <button
+          type="button"
           onClick={() => router.push("/onboarding")}
-          className="bg-black text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-gray-800 transition"
+          className="rounded-xl bg-black px-8 py-4 text-lg font-semibold text-white transition hover:bg-gray-800"
         >
           Get Started
         </button>

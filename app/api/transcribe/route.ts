@@ -1,15 +1,10 @@
-import OpenAI from "openai";
 import { NextResponse } from "next/server";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export async function POST(request: Request) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      console.error("OPENAI_API_KEY is missing.");
+    const apiKey = process.env.OPENAI_API_KEY;
 
+    if (!apiKey) {
       return NextResponse.json(
         {
           error: "OPENAI_API_KEY is missing from .env.local",
@@ -18,6 +13,7 @@ export async function POST(request: Request) {
       );
     }
 
+    // The frontend sends FormData.
     const formData = await request.formData();
 
     const audio = formData.get("audio");
@@ -25,7 +21,7 @@ export async function POST(request: Request) {
     if (!(audio instanceof File)) {
       return NextResponse.json(
         {
-          error: "Audio file is required.",
+          error: "No audio file was received.",
         },
         { status: 400 }
       );
@@ -34,56 +30,72 @@ export async function POST(request: Request) {
     if (audio.size === 0) {
       return NextResponse.json(
         {
-          error: "The audio recording is empty.",
+          error: "The audio file is empty.",
         },
         { status: 400 }
       );
     }
 
-    console.log("========== VOICE TRANSCRIPTION ==========");
-    console.log("File:", audio.name);
-    console.log("Type:", audio.type);
-    console.log("Size:", audio.size);
-    console.log("==========================================");
+    // Send the audio to OpenAI transcription.
+    const openAIForm = new FormData();
 
-    const transcription =
-      await openai.audio.transcriptions.create({
-        file: audio,
-        model: "gpt-4o-mini-transcribe",
-      });
+    openAIForm.append("file", audio);
+    openAIForm.append("model", "gpt-4o-mini-transcribe");
+
+    const response = await fetch(
+      "https://api.openai.com/v1/audio/transcriptions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: openAIForm,
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("OpenAI transcription error:", data);
+
+      return NextResponse.json(
+        {
+          error:
+            data?.error?.message ||
+            "Could not transcribe your voice.",
+        },
+        {
+          status: response.status,
+        }
+      );
+    }
 
     const text =
-      transcription.text?.trim() || "";
+      typeof data?.text === "string"
+        ? data.text.trim()
+        : "";
 
     if (!text) {
       return NextResponse.json(
         {
-          error:
-            "I couldn't understand what you said. Please try speaking again.",
+          error: "No speech was detected.",
         },
         { status: 400 }
       );
     }
 
-    console.log("Transcription:", text);
-
     return NextResponse.json({
       text,
     });
-  } catch (error: any) {
-    console.error(
-      "========== TRANSCRIPTION ERROR =========="
-    );
-    console.error(error);
-    console.error(
-      "=========================================="
-    );
+  } catch (error) {
+    console.error("Transcription route error:", error);
 
     return NextResponse.json(
       {
         error:
-          error?.message ||
-          "Could not transcribe the audio.",
+          error instanceof Error
+            ? error.message
+            : "Could not transcribe your voice.",
       },
       { status: 500 }
     );
