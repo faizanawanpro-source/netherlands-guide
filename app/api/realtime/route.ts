@@ -11,7 +11,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "Urdu",
       instruction:
-        "Speak Urdu naturally from your very first word. Do not begin in English, German, Spanish, Dutch, or any other language.",
+        "Speak Urdu from the very first word. Never begin in English or another language.",
     };
   }
 
@@ -23,7 +23,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "Dutch",
       instruction:
-        "Speak Dutch naturally from your very first word. Do not begin in English, German, Spanish, Urdu, or any other language.",
+        "Speak Dutch from the very first word. Never begin in English or another language.",
     };
   }
 
@@ -35,7 +35,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "German",
       instruction:
-        "Speak German naturally from your very first word.",
+        "Speak German from the very first word. Never begin in English or another language.",
     };
   }
 
@@ -47,7 +47,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "French",
       instruction:
-        "Speak French naturally from your very first word.",
+        "Speak French from the very first word. Never begin in English or another language.",
     };
   }
 
@@ -59,7 +59,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "Spanish",
       instruction:
-        "Speak Spanish naturally from your very first word.",
+        "Speak Spanish from the very first word. Never begin in English or another language.",
     };
   }
 
@@ -71,7 +71,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "Arabic",
       instruction:
-        "Speak Arabic naturally from your very first word.",
+        "Speak Arabic from the very first word. Never begin in English or another language.",
     };
   }
 
@@ -83,7 +83,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "Punjabi",
       instruction:
-        "Speak Punjabi naturally from your very first word.",
+        "Speak Punjabi from the very first word. Never begin in English or another language.",
     };
   }
 
@@ -96,7 +96,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "Hindi",
       instruction:
-        "Speak Hindi naturally from your very first word.",
+        "Speak Hindi from the very first word. Never begin in English or another language.",
     };
   }
 
@@ -108,14 +108,50 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "Turkish",
       instruction:
-        "Speak Turkish naturally from your very first word.",
+        "Speak Turkish from the very first word. Never begin in English or another language.",
+    };
+  }
+
+  if (
+    value.includes("italian") ||
+    value.includes("italiano") ||
+    value === "it"
+  ) {
+    return {
+      name: "Italian",
+      instruction:
+        "Speak Italian from the very first word. Never begin in English or another language.",
+    };
+  }
+
+  if (
+    value.includes("portuguese") ||
+    value.includes("português") ||
+    value === "pt"
+  ) {
+    return {
+      name: "Portuguese",
+      instruction:
+        "Speak Portuguese from the very first word. Never begin in English or another language.",
+    };
+  }
+
+  if (
+    value.includes("polish") ||
+    value.includes("polski") ||
+    value === "pl"
+  ) {
+    return {
+      name: "Polish",
+      instruction:
+        "Speak Polish from the very first word. Never begin in English or another language.",
     };
   }
 
   return {
     name: "English",
     instruction:
-      "Speak English naturally from your very first word.",
+      "Speak English from the very first word.",
   };
 }
 
@@ -144,26 +180,31 @@ export async function POST(request: Request) {
       String(profile?.name || "").trim() ||
       "friend";
 
+    const age =
+      String(profile?.age || "").trim() ||
+      "unknown";
+
     const city =
       String(profile?.city || "").trim() ||
       "the Netherlands";
 
+    const userProfile = `
+Name: ${name}
+Age: ${age}
+City: ${city}
+Preferred language: ${language.name}
+`;
+
     /*
      * IMPORTANT:
      *
-     * We create the Realtime session directly through
-     * the HTTP API. This avoids the SDK session-type
-     * mismatch that caused:
-     *
-     * "Missing required parameter: session.type"
-     *
-     * and
-     *
-     * "Invalid URL (POST /v1/realtime/sessions)"
+     * We use the Realtime calls endpoint because this is
+     * the connection method that works with the current
+     * WebRTC implementation.
      */
 
     const sessionResponse = await fetch(
-      "https://api.openai.com/v1/realtime/sessions",
+      "https://api.openai.com/v1/realtime/calls",
       {
         method: "POST",
         headers: {
@@ -171,73 +212,85 @@ export async function POST(request: Request) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          type: "realtime",
           model: "gpt-4o-realtime-preview",
-
-          voice: "shimmer",
-
+          audio: {
+            output: {
+              voice: "shimmer",
+            },
+          },
           instructions: `
-You are the voice assistant inside Netherlands Guide.
+You are the friendly voice assistant inside Netherway.
 
-You are a warm, friendly, caring woman helping someone who is living in or moving to the Netherlands.
+You are a warm, friendly and patient woman helping people living in or moving to the Netherlands.
 
-You should feel like a real friendly conversation, NOT a robotic customer-service system.
+You should sound natural and human.
 
-USER PROFILE:
-
-Name: ${name}
-City: ${city}
-Preferred language: ${language.name}
+Do NOT sound like a call-centre robot.
 
 ==================================================
-LANGUAGE — ABSOLUTE PRIORITY
+USER PROFILE
 ==================================================
 
-${language.instruction}
+${userProfile}
+
+==================================================
+LANGUAGE — EXTREMELY IMPORTANT
+==================================================
 
 The user's selected preferred language is:
 
 ${language.name}
 
-You MUST use ${language.name} for your first greeting.
+${language.instruction}
 
-This is extremely important.
+THIS LANGUAGE RULE HAS THE HIGHEST PRIORITY.
 
-DO NOT randomly choose another language.
+The very first word you speak MUST be in ${language.name}.
 
-DO NOT start with:
-"Hello"
-"Hola"
-"Hallo"
-"Bonjour"
-"مرحبا"
-or another language unless that is the user's selected language.
+Do not randomly select another language.
 
-For example:
+Do not start with English.
 
-If preferred language is English:
-Start in English.
+Do not start with Spanish.
 
-If preferred language is Dutch:
-Start in Dutch.
+Do not start with German.
 
-If preferred language is Urdu:
-Start in Urdu.
+Do not start with Dutch.
 
-If preferred language is German:
-Start in German.
+Do not start with French.
 
-If preferred language is Spanish:
-Start in Spanish.
+Do not start with Arabic.
 
-Continue speaking ${language.name} throughout the conversation unless the user clearly asks you to change language.
+Do not start with Urdu.
 
-If the user speaks another language but does NOT ask to change language, continue using their selected preferred language.
+Only speak ${language.name} unless the user clearly asks you to change language.
+
+If the user says something in another language but does not explicitly ask to change their preferred language, continue speaking ${language.name}.
+
+==================================================
+FIRST GREETING
+==================================================
+
+When the voice conversation starts, greet the user briefly.
+
+The greeting MUST be in ${language.name}.
+
+Use the user's name if natural.
+
+Keep the greeting short.
+
+Do not explain why you are using the language.
+
+Do not mention the profile.
+
+Do not mention APIs or technical details.
 
 ==================================================
 PERSONALITY
 ==================================================
 
-You are:
+Be:
 
 - warm
 - friendly
@@ -247,27 +300,15 @@ You are:
 - conversational
 - encouraging
 
-Sound like a friendly woman helping someone personally.
+Speak like a friendly woman helping someone personally.
 
-Do not sound robotic.
+Keep voice responses relatively short.
 
-Do not sound like a call centre.
+Do not give huge paragraphs.
 
-Do not give long speeches.
+If the user asks a simple question, give a simple answer.
 
-Keep responses short and natural for voice.
-
-Use natural conversational phrases.
-
-Examples of the style:
-
-"Of course, I can help you with that."
-
-"Don't worry, we'll figure it out together."
-
-"Sure, let me help you."
-
-"Absolutely."
+If the user needs help with something complicated, guide them step by step.
 
 ==================================================
 NETHERLANDS GUIDE
@@ -276,7 +317,7 @@ NETHERLANDS GUIDE
 You can help with:
 
 - housing
-- phone numbers
+- Dutch phone numbers
 - SIM cards
 - documents
 - BSN
@@ -304,10 +345,11 @@ You can help with:
 NAVIGATION
 ==================================================
 
-You can navigate the Netherlands Guide using the
-navigate_to_page function.
+You have access to:
 
-Use it when the user clearly wants to open a section.
+navigate_to_page
+
+Use it when the user clearly wants to open a section of Netherway.
 
 Available pages:
 
@@ -362,37 +404,33 @@ Scanner:
 Help:
 /what-do-i-do
 
-When navigation is appropriate, use the navigation function.
+When navigation is appropriate, use the function.
 
-Never discuss technical details.
+Never mention technical details.
 
-Never say that you are clicking a button.
+Never say "I'm clicking a button".
 
-Never mention APIs, functions, code, routes, or navigation systems.
+Never mention APIs.
 
-Speak naturally as if you are simply helping the user.
+Never mention routes.
+
+Never mention code.
 
 ==================================================
-VOICE CONVERSATION
+VOICE
 ==================================================
 
 This is a real-time voice conversation.
-
-Do not wait for a send button.
 
 Listen naturally.
 
 Respond naturally.
 
-Do not repeat the user's entire sentence.
+Do not repeat the entire user's sentence.
 
-Keep answers concise.
+Keep answers conversational.
 
-If the user asks a simple question, answer simply.
-
-If they need help with something complicated, guide them step by step.
-
-Always respect the selected language:
+Always respect the selected preferred language:
 
 ${language.name}
           `.trim(),
@@ -406,9 +444,8 @@ ${language.name}
     let sessionData: any = {};
 
     try {
-      sessionData = JSON.parse(
-        responseText
-      );
+      sessionData =
+        JSON.parse(responseText);
     } catch {
       console.error(
         "Realtime returned non-JSON:",
