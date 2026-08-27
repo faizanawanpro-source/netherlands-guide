@@ -11,7 +11,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "Urdu",
       instruction:
-        "Speak Urdu from the very first word. Never begin in English or another language.",
+        "Speak Urdu naturally from the very first word.",
     };
   }
 
@@ -23,7 +23,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "Dutch",
       instruction:
-        "Speak Dutch from the very first word. Never begin in English or another language.",
+        "Speak Dutch naturally from the very first word.",
     };
   }
 
@@ -35,7 +35,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "German",
       instruction:
-        "Speak German from the very first word. Never begin in English or another language.",
+        "Speak German naturally from the very first word.",
     };
   }
 
@@ -47,7 +47,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "French",
       instruction:
-        "Speak French from the very first word. Never begin in English or another language.",
+        "Speak French naturally from the very first word.",
     };
   }
 
@@ -59,7 +59,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "Spanish",
       instruction:
-        "Speak Spanish from the very first word. Never begin in English or another language.",
+        "Speak Spanish naturally from the very first word.",
     };
   }
 
@@ -71,7 +71,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "Arabic",
       instruction:
-        "Speak Arabic from the very first word. Never begin in English or another language.",
+        "Speak Arabic naturally from the very first word.",
     };
   }
 
@@ -83,7 +83,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "Punjabi",
       instruction:
-        "Speak Punjabi from the very first word. Never begin in English or another language.",
+        "Speak Punjabi naturally from the very first word.",
     };
   }
 
@@ -96,7 +96,7 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "Hindi",
       instruction:
-        "Speak Hindi from the very first word. Never begin in English or another language.",
+        "Speak Hindi naturally from the very first word.",
     };
   }
 
@@ -108,50 +108,14 @@ function getLanguageInfo(language: unknown) {
     return {
       name: "Turkish",
       instruction:
-        "Speak Turkish from the very first word. Never begin in English or another language.",
-    };
-  }
-
-  if (
-    value.includes("italian") ||
-    value.includes("italiano") ||
-    value === "it"
-  ) {
-    return {
-      name: "Italian",
-      instruction:
-        "Speak Italian from the very first word. Never begin in English or another language.",
-    };
-  }
-
-  if (
-    value.includes("portuguese") ||
-    value.includes("português") ||
-    value === "pt"
-  ) {
-    return {
-      name: "Portuguese",
-      instruction:
-        "Speak Portuguese from the very first word. Never begin in English or another language.",
-    };
-  }
-
-  if (
-    value.includes("polish") ||
-    value.includes("polski") ||
-    value === "pl"
-  ) {
-    return {
-      name: "Polish",
-      instruction:
-        "Speak Polish from the very first word. Never begin in English or another language.",
+        "Speak Turkish naturally from the very first word.",
     };
   }
 
   return {
     name: "English",
     instruction:
-      "Speak English from the very first word.",
+      "Speak English naturally from the very first word.",
   };
 }
 
@@ -164,7 +128,9 @@ export async function POST(request: Request) {
         {
           error: "OPENAI_API_KEY is missing.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
@@ -180,117 +146,89 @@ export async function POST(request: Request) {
       String(profile?.name || "").trim() ||
       "friend";
 
-    const age =
-      String(profile?.age || "").trim() ||
-      "unknown";
-
     const city =
       String(profile?.city || "").trim() ||
       "the Netherlands";
 
-    const userProfile = `
+    const instructions = `
+You are the friendly voice assistant inside Netherlands Guide.
+
+You are a warm, friendly and caring woman helping someone living in or moving to the Netherlands.
+
+You must sound natural and conversational.
+
+USER PROFILE
+
 Name: ${name}
-Age: ${age}
 City: ${city}
 Preferred language: ${language.name}
-`;
-
-    /*
-     * IMPORTANT:
-     *
-     * We use the Realtime calls endpoint because this is
-     * the connection method that works with the current
-     * WebRTC implementation.
-     */
-
-    const sessionResponse = await fetch(
-      "https://api.openai.com/v1/realtime/calls",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          type: "realtime",
-          model: "gpt-4o-realtime-preview",
-          audio: {
-            output: {
-              voice: "shimmer",
-            },
-          },
-          instructions: `
-You are the friendly voice assistant inside Netherway.
-
-You are a warm, friendly and patient woman helping people living in or moving to the Netherlands.
-
-You should sound natural and human.
-
-Do NOT sound like a call-centre robot.
 
 ==================================================
-USER PROFILE
+LANGUAGE
 ==================================================
 
-${userProfile}
-
-==================================================
-LANGUAGE — EXTREMELY IMPORTANT
-==================================================
-
-The user's selected preferred language is:
+The user's preferred language is:
 
 ${language.name}
 
 ${language.instruction}
 
-THIS LANGUAGE RULE HAS THE HIGHEST PRIORITY.
+THIS IS VERY IMPORTANT:
 
-The very first word you speak MUST be in ${language.name}.
+You MUST speak ${language.name} from your FIRST spoken word.
 
-Do not randomly select another language.
+Do NOT randomly choose another language.
 
-Do not start with English.
+Do NOT start in English if the user's preferred language is not English.
 
-Do not start with Spanish.
+Do NOT start with:
+"Hello"
+"Hola"
+"Hallo"
+"Bonjour"
+"مرحبا"
 
-Do not start with German.
+unless that language is actually the user's selected language.
 
-Do not start with Dutch.
+If the user's preferred language is English:
+speak English.
 
-Do not start with French.
+If it is Dutch:
+speak Dutch.
 
-Do not start with Arabic.
+If it is Urdu:
+speak Urdu.
 
-Do not start with Urdu.
+If it is German:
+speak German.
 
-Only speak ${language.name} unless the user clearly asks you to change language.
+If it is Spanish:
+speak Spanish.
 
-If the user says something in another language but does not explicitly ask to change their preferred language, continue speaking ${language.name}.
+If it is French:
+speak French.
 
-==================================================
-FIRST GREETING
-==================================================
+If it is Arabic:
+speak Arabic.
 
-When the voice conversation starts, greet the user briefly.
+If it is Punjabi:
+speak Punjabi.
 
-The greeting MUST be in ${language.name}.
+If it is Hindi:
+speak Hindi.
 
-Use the user's name if natural.
+If it is Turkish:
+speak Turkish.
 
-Keep the greeting short.
+Continue using ${language.name} throughout the conversation.
 
-Do not explain why you are using the language.
-
-Do not mention the profile.
-
-Do not mention APIs or technical details.
+Only change language if the user clearly asks you to.
 
 ==================================================
 PERSONALITY
 ==================================================
 
-Be:
+You are:
 
 - warm
 - friendly
@@ -300,24 +238,24 @@ Be:
 - conversational
 - encouraging
 
-Speak like a friendly woman helping someone personally.
+Sound like a friendly woman helping someone personally.
 
-Keep voice responses relatively short.
+Do not sound like a call centre.
+
+Do not sound robotic.
 
 Do not give huge paragraphs.
 
-If the user asks a simple question, give a simple answer.
-
-If the user needs help with something complicated, guide them step by step.
+Keep voice responses short and natural.
 
 ==================================================
 NETHERLANDS GUIDE
 ==================================================
 
-You can help with:
+You help users with:
 
 - housing
-- Dutch phone numbers
+- phone numbers
 - SIM cards
 - documents
 - BSN
@@ -345,11 +283,7 @@ You can help with:
 NAVIGATION
 ==================================================
 
-You have access to:
-
-navigate_to_page
-
-Use it when the user clearly wants to open a section of Netherway.
+You can use the navigate_to_page function when the user clearly asks to open a section.
 
 Available pages:
 
@@ -404,17 +338,19 @@ Scanner:
 Help:
 /what-do-i-do
 
-When navigation is appropriate, use the function.
+When navigation is appropriate, use the navigation function.
 
 Never mention technical details.
 
-Never say "I'm clicking a button".
-
 Never mention APIs.
+
+Never mention code.
 
 Never mention routes.
 
-Never mention code.
+Never say you are clicking a button.
+
+Simply help the user naturally.
 
 ==================================================
 VOICE
@@ -428,12 +364,49 @@ Respond naturally.
 
 Do not repeat the entire user's sentence.
 
-Keep answers conversational.
+Keep responses concise.
+
+If the user asks a simple question, answer simply.
+
+If something requires multiple steps, guide them step by step.
 
 Always respect the selected preferred language:
 
 ${language.name}
-          `.trim(),
+`.trim();
+
+    /*
+     * Create the ephemeral Realtime client secret.
+     *
+     * IMPORTANT:
+     * This request is JSON.
+     *
+     * The browser will later use the returned client
+     * secret with /v1/realtime/calls using application/sdp.
+     */
+
+    const sessionResponse = await fetch(
+      "https://api.openai.com/v1/realtime/sessions",
+      {
+        method: "POST",
+
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          model: "gpt-4o-realtime-preview",
+
+          type: "realtime",
+
+          instructions,
+
+          audio: {
+            output: {
+              voice: "shimmer",
+            },
+          },
         }),
       }
     );
@@ -444,8 +417,9 @@ ${language.name}
     let sessionData: any = {};
 
     try {
-      sessionData =
-        JSON.parse(responseText);
+      sessionData = JSON.parse(
+        responseText
+      );
     } catch {
       console.error(
         "Realtime returned non-JSON:",
@@ -476,7 +450,7 @@ ${language.name}
 
     if (!clientSecret) {
       console.error(
-        "No client secret returned:",
+        "No Realtime client secret returned:",
         sessionData
       );
 
@@ -485,7 +459,9 @@ ${language.name}
           error:
             "Realtime session was created, but no client secret was returned.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
@@ -506,7 +482,9 @@ ${language.name}
             ? error.message
             : "Could not start realtime voice assistant.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
