@@ -10,7 +10,8 @@ function getLanguageInfo(language: unknown) {
   if (value.includes("urdu") || value.includes("اردو")) {
     return {
       name: "Urdu",
-      greeting: "سلام! میں نیدرلینڈز گائیڈ ہوں۔ میں آپ کی مدد کے لیے یہاں ہوں۔",
+      greeting:
+        "سلام! میں نیدرلینڈز گائیڈ ہوں۔ میں آپ کی مدد کے لیے یہاں ہوں۔",
     };
   }
 
@@ -120,18 +121,25 @@ function getLanguageInfo(language: unknown) {
 
 export async function POST(request: Request) {
   try {
+    // ============================================================
+    // OPENAI API KEY
+    // ============================================================
+
     const apiKey = process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json(
         {
-          error: "OPENAI_API_KEY is missing.",
+          error:
+            "OPENAI_API_KEY is missing. Add it to your Vercel Environment Variables.",
         },
-        {
-          status: 500,
-        }
+        { status: 500 }
       );
     }
+
+    // ============================================================
+    // READ PROFILE
+    // ============================================================
 
     const body = await request.json().catch(() => ({}));
 
@@ -149,12 +157,19 @@ export async function POST(request: Request) {
       String(profile?.city || "").trim() ||
       "the Netherlands";
 
+    // ============================================================
+    // AI INSTRUCTIONS
+    // ============================================================
+
     const instructions = `
 You are the friendly voice assistant inside Netherlands Guide.
 
-You are a warm, friendly, caring woman helping someone living in or moving to the Netherlands.
+You are a warm, friendly, caring woman helping someone who lives in or is moving to the Netherlands.
 
-You should sound natural and human, not robotic.
+You should sound natural, friendly and human.
+
+Do not sound robotic.
+Do not sound like a call centre.
 
 USER PROFILE
 
@@ -163,30 +178,32 @@ City: ${city}
 Preferred language: ${language.name}
 
 ==================================================
-LANGUAGE — VERY IMPORTANT
+LANGUAGE — ABSOLUTE PRIORITY
 ==================================================
 
-The user's preferred language is ${language.name}.
+The user's preferred language is:
 
-YOU MUST SPEAK ${language.name} FROM YOUR VERY FIRST WORD.
+${language.name}
 
-Never randomly switch languages.
-
-Never begin in English if the preferred language is not English.
-
-Never begin in German, Spanish, Dutch, French, Arabic, Urdu, Hindi or another language unless that is the user's selected language.
+You MUST speak ${language.name} from your very first spoken word.
 
 Your first greeting MUST be in ${language.name}.
 
-Suggested first greeting:
+Do NOT randomly choose another language.
+
+Do NOT start with English unless English is the user's preferred language.
+
+Do NOT start with Spanish, German, Dutch, French, Arabic, Urdu, Hindi, Punjabi or Turkish unless that is the user's preferred language.
+
+Your first greeting should be:
 
 ${language.greeting}
 
-After the greeting, continue the entire conversation in ${language.name}.
+After the greeting, continue speaking ${language.name}.
 
 Only change language if the user clearly asks you to.
 
-If the user speaks another language but does not ask you to change languages, continue using ${language.name}.
+If the user speaks another language without asking to change language, continue using ${language.name}.
 
 ==================================================
 PERSONALITY
@@ -202,21 +219,15 @@ Be:
 - conversational
 - encouraging
 
-Speak like a friendly person helping someone personally.
+Keep answers relatively short because this is a voice conversation.
 
-Do not sound like a call centre.
-
-Do not sound robotic.
-
-Keep voice answers relatively short.
-
-Do not give unnecessarily long explanations.
+Do not give unnecessarily long speeches.
 
 ==================================================
 WHAT YOU CAN HELP WITH
 ==================================================
 
-You can help users with:
+Help users with:
 
 - housing
 - Dutch phone numbers
@@ -248,11 +259,7 @@ You can help users with:
 NAVIGATION
 ==================================================
 
-You have a function called:
-
-navigate_to_page
-
-Use it when the user clearly wants to open a section of Netherlands Guide.
+When the user clearly wants to open a section of Netherlands Guide, use the navigate_to_page tool.
 
 Available pages:
 
@@ -336,18 +343,21 @@ Keep answers concise.
 Always respect the user's preferred language:
 
 ${language.name}
-    `.trim();
+`.trim();
 
-    /*
-     * IMPORTANT:
-     *
-     * We use the HTTP Realtime Sessions endpoint directly.
-     *
-     * This avoids the SDK URL/session mismatch.
-     */
+    // ============================================================
+    // CREATE EPHEMERAL REALTIME CLIENT SECRET
+    //
+    // IMPORTANT:
+    // The old /v1/realtime/sessions endpoint is no longer
+    // the endpoint we should use for this browser flow.
+    //
+    // Current endpoint:
+    // /v1/realtime/client_secrets
+    // ============================================================
 
     const sessionResponse = await fetch(
-      "https://api.openai.com/v1/realtime/sessions",
+      "https://api.openai.com/v1/realtime/client_secrets",
       {
         method: "POST",
 
@@ -357,16 +367,24 @@ ${language.name}
         },
 
         body: JSON.stringify({
-          model: "gpt-4o-realtime-preview",
-
-          voice: "shimmer",
-
-          instructions,
-
-          type: "realtime",
+          session: {
+            type: "realtime",
+            model: "gpt-realtime",
+            instructions,
+            output_modalities: ["audio"],
+            audio: {
+              output: {
+                voice: "shimmer",
+              },
+            },
+          },
         }),
       }
     );
+
+    // ============================================================
+    // READ OPENAI RESPONSE
+    // ============================================================
 
     const responseText =
       await sessionResponse.text();
@@ -379,22 +397,26 @@ ${language.name}
       );
     } catch {
       console.error(
-        "Realtime returned non-JSON:",
+        "OpenAI returned non-JSON:",
         responseText
       );
     }
 
+    // ============================================================
+    // HANDLE OPENAI ERROR
+    // ============================================================
+
     if (!sessionResponse.ok) {
       console.error(
-        "Realtime session creation failed:",
-        sessionData
+        "Realtime client secret creation failed:",
+        sessionData || responseText
       );
 
       return NextResponse.json(
         {
           error:
             sessionData?.error?.message ||
-            `Realtime session failed (${sessionResponse.status}).`,
+            `Realtime client secret failed (${sessionResponse.status}).`,
         },
         {
           status: sessionResponse.status,
@@ -402,19 +424,31 @@ ${language.name}
       );
     }
 
+    // ============================================================
+    // CURRENT API RETURNS:
+    //
+    // {
+    //   "value": "ek_....",
+    //   "expires_at": ...,
+    //   "session": {...}
+    // }
+    //
+    // We need the "value".
+    // ============================================================
+
     const clientSecret =
-      sessionData?.client_secret?.value;
+      sessionData?.value;
 
     if (!clientSecret) {
       console.error(
-        "No client secret returned:",
+        "No client secret returned by OpenAI:",
         sessionData
       );
 
       return NextResponse.json(
         {
           error:
-            "Realtime session was created, but no client secret was returned.",
+            "OpenAI created the Realtime client secret request but did not return a client secret.",
         },
         {
           status: 500,
@@ -422,13 +456,17 @@ ${language.name}
       );
     }
 
+    // ============================================================
+    // SEND SHORT-LIVED KEY TO BROWSER
+    // ============================================================
+
     return NextResponse.json({
       client_secret: clientSecret,
       language: language.name,
     });
   } catch (error) {
     console.error(
-      "REALTIME SESSION ERROR:",
+      "REALTIME ROUTE ERROR:",
       error
     );
 
@@ -437,7 +475,7 @@ ${language.name}
         error:
           error instanceof Error
             ? error.message
-            : "Could not start realtime voice assistant.",
+            : "Could not create the Realtime voice session.",
       },
       {
         status: 500,
