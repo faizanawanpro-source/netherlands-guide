@@ -25,10 +25,13 @@ export async function POST(request: Request) {
       formData.get("language") || "English"
     );
 
+    // DEBUG: Check whether a file was actually received
     if (!(image instanceof File)) {
       return NextResponse.json(
         {
-          error: 'No image received. Send the file using the field "image".',
+          error: "DEBUG: No valid File received.",
+          receivedType: typeof image,
+          receivedValue: image ? String(image) : null,
         },
         {
           status: 400,
@@ -36,10 +39,15 @@ export async function POST(request: Request) {
       );
     }
 
+    // DEBUG: Check the uploaded file
     if (!image.type.startsWith("image/")) {
       return NextResponse.json(
         {
-          error: "Please upload an image such as JPG, JPEG, PNG, or HEIC.",
+          error:
+            "DEBUG: File received but it is not recognized as an image.",
+          fileType: image.type,
+          fileName: image.name,
+          fileSize: image.size,
         },
         {
           status: 400,
@@ -129,21 +137,15 @@ export async function POST(request: Request) {
 
     let reply = "";
 
-    if (
-      typeof data.output_text === "string"
-    ) {
+    if (typeof data.output_text === "string") {
       reply = data.output_text;
     }
 
     if (!reply && Array.isArray(data.output)) {
       for (const item of data.output) {
-        if (
-          Array.isArray(item.content)
-        ) {
+        if (Array.isArray(item.content)) {
           for (const content of item.content) {
-            if (
-              typeof content.text === "string"
-            ) {
+            if (typeof content.text === "string") {
               reply += content.text;
             }
           }
