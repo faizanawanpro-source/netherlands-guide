@@ -1,8 +1,8 @@
-import OpenAI from "openai";
+import Groq from "groq-sdk";
 import { NextResponse } from "next/server";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
 });
 
 const allowedPages = [
@@ -28,15 +28,25 @@ const allowedPages = [
 
 export async function POST(request: Request) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
+    // ============================================================
+    // CHECK GROQ API KEY
+    // ============================================================
+
+    if (!process.env.GROQ_API_KEY) {
+      console.error("GROQ_API_KEY is missing from .env.local");
+
       return NextResponse.json(
         {
           error:
-            "OPENAI_API_KEY is missing from .env.local",
+            "GROQ_API_KEY is missing from .env.local",
         },
         { status: 500 }
       );
     }
+
+    // ============================================================
+    // READ REQUEST
+    // ============================================================
 
     const body = await request.json();
 
@@ -44,16 +54,15 @@ export async function POST(request: Request) {
 
     const profile = body.profile || {};
 
-    const conversation = Array.isArray(
-      body.conversation
-    )
+    const conversation = Array.isArray(body.conversation)
       ? body.conversation
       : [];
 
-    if (
-      !message ||
-      typeof message !== "string"
-    ) {
+    // ============================================================
+    // VALIDATE MESSAGE
+    // ============================================================
+
+    if (!message || typeof message !== "string") {
       return NextResponse.json(
         {
           error: "Message is required.",
@@ -61,6 +70,10 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // ============================================================
+    // PREVIOUS CONVERSATION
+    // ============================================================
 
     const conversationText = conversation
       .slice(-20)
@@ -77,11 +90,11 @@ export async function POST(request: Request) {
       )
       .join("\n");
 
-    const response =
-      await openai.responses.create({
-        model: "gpt-5.6",
+    // ============================================================
+    // SYSTEM PROMPT
+    // ============================================================
 
-        instructions: `
+    const systemPrompt = `
 You are Netherlands Guide AI.
 
 You are a friendly conversational assistant built specifically
@@ -153,9 +166,9 @@ voice into:
 
 Do NOT start teaching quadratic equations.
 
-Instead say something natural such as:
+Instead say naturally:
 
-"I'm mainly here to help you with life and practical matters
+"I'm mainly here to help with life and practical matters
 in the Netherlands. If you meant something related to the
 Netherlands, tell me what you need and I'll help."
 
@@ -170,7 +183,7 @@ Do NOT invent an answer when the user's meaning is unclear.
 SPEECH RECOGNITION
 ============================================================
 
-The user is speaking to you through a microphone.
+The user may be speaking through a microphone.
 
 Speech-to-text can occasionally misunderstand words.
 
@@ -182,11 +195,8 @@ meaning.
 For example:
 
 "BSN number"
-
 "BSN"
-
 "my citizen number"
-
 "burger service number"
 
 may all mean the same thing.
@@ -205,15 +215,10 @@ Remember the previous messages provided to you.
 Understand phrases such as:
 
 "what about that?"
-
 "how much is it?"
-
 "and where do I get that?"
-
 "what if I don't have one?"
-
 "okay, how do I apply?"
-
 "what happens next?"
 
 Do not repeatedly explain things the user already understands.
@@ -257,14 +262,13 @@ If the user speaks another language during the conversation,
 you may respond in that language if it clearly makes the
 conversation easier.
 
-For voice conversations, keep the language natural and
-easy to understand.
+Keep the language natural and easy to understand.
 
 ============================================================
 VOICE CONVERSATION STYLE
 ============================================================
 
-Your answer will be spoken aloud.
+Your answer may be spoken aloud.
 
 Therefore:
 
@@ -312,7 +316,7 @@ Never ask for:
 - secret security information
 
 If a user asks about one of these, explain that they should
-never share it.
+never share them.
 
 ============================================================
 AVAILABLE APP PAGES
@@ -342,43 +346,43 @@ You can request navigation to these pages:
 Navigation examples:
 
 Dutch phone number:
- /dutch-phone-number
+/dutch-phone-number
 
 BSN / DigiD / documents:
- /documents
+/documents
 
 Housing:
- /housing
+/housing
 
 Doctor / huisarts / healthcare:
- /healthcare
+/healthcare
 
 Money / banking / taxes:
- /money
+/money
 
 Jobs / employment:
- /work
+/work
 
 Education / studying:
- /study
+/study
 
 Public transport:
- /transport
+/transport
 
 Municipality:
- /municipality
+/municipality
 
 Cars / driving / vehicles:
- /vehicles
+/vehicles
 
 Waste:
- /waste
+/waste
 
 Trips:
- /trip-planner
+/trip-planner
 
 Day planning:
- /plan-day
+/plan-day
 
 ============================================================
 NAVIGATION RULE
@@ -400,7 +404,7 @@ The application handles navigation.
 RESPONSE FORMAT
 ============================================================
 
-Always return:
+You MUST always return exactly this format:
 
 REPLY:
 your natural conversational response
@@ -408,20 +412,51 @@ your natural conversational response
 DESTINATION:
 the appropriate page path, or NONE
 
-The destination must be one of the allowed pages above.
+The destination MUST be one of the allowed pages above.
 
-Previous conversation:
+============================================================
+PREVIOUS CONVERSATION
+============================================================
 
 ${conversationText}
-        `,
+`;
 
-        input: message,
+    // ============================================================
+    // CALL GROQ
+    // ============================================================
+
+    const response =
+      await groq.chat.completions.create({
+        model: "openai/gpt-oss-20b",
+
+        temperature: 0.5,
+
+        max_completion_tokens: 800,
+
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt,
+          },
+          {
+            role: "user",
+            content: message,
+          },
+        ],
       });
 
+    // ============================================================
+    // GET AI RESPONSE
+    // ============================================================
+
     const output =
-      response.output_text?.trim();
+      response.choices?.[0]?.message?.content?.trim();
 
     if (!output) {
+      console.error(
+        "Groq returned an empty response."
+      );
+
       return NextResponse.json(
         {
           error:
@@ -431,33 +466,47 @@ ${conversationText}
       );
     }
 
+    // ============================================================
+    // DEBUG LOG
+    // ============================================================
+
     console.log(
-      "========== AI RESPONSE =========="
+      "========== GROQ AI RESPONSE =========="
     );
 
     console.log(output);
 
     console.log(
-      "================================="
+      "======================================="
     );
+
+    // ============================================================
+    // PARSE REPLY
+    // ============================================================
 
     let reply = output;
 
-    let destination:
-      | string
-      | null = null;
+    let destination: string | null = null;
 
     const replyMatch = output.match(
-      /REPLY:\s*([\s\S]*?)(?=\nDESTINATION:|$)/i
+      /REPLY:\s*([\s\S]*?)(?=\n\s*DESTINATION:|$)/i
     );
 
     const destinationMatch = output.match(
       /DESTINATION:\s*(\/[^\s]+|NONE)/i
     );
 
+    // ============================================================
+    // EXTRACT REPLY
+    // ============================================================
+
     if (replyMatch) {
       reply = replyMatch[1].trim();
     }
+
+    // ============================================================
+    // EXTRACT DESTINATION
+    // ============================================================
 
     if (destinationMatch) {
       const destinationValue =
@@ -465,31 +514,41 @@ ${conversationText}
 
       if (
         destinationValue !== "NONE" &&
-        allowedPages.includes(
-          destinationValue
-        )
+        allowedPages.includes(destinationValue)
       ) {
         destination = destinationValue;
       }
     }
 
+    // ============================================================
+    // CLEAN REPLY
+    // ============================================================
+
     reply = reply
       .replace(/^REPLY:\s*/i, "")
       .trim();
+
+    // ============================================================
+    // RETURN RESPONSE
+    // ============================================================
 
     return NextResponse.json({
       reply,
       destination,
     });
   } catch (error: any) {
+    // ============================================================
+    // ERROR HANDLING
+    // ============================================================
+
     console.error(
-      "========== OPENAI ERROR =========="
+      "========== GROQ ERROR =========="
     );
 
     console.error(error);
 
     console.error(
-      "=================================="
+      "================================"
     );
 
     return NextResponse.json(

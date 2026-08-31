@@ -1,19 +1,34 @@
+import Groq from "groq-sdk";
 import { NextResponse } from "next/server";
+
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
 
 export async function POST(request: Request) {
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
+    // ============================================================
+    // CHECK GROQ API KEY
+    // ============================================================
 
-    if (!apiKey) {
+    if (!process.env.GROQ_API_KEY) {
+      console.error(
+        "GROQ_API_KEY is missing from .env.local"
+      );
+
       return NextResponse.json(
         {
-          error: "OPENAI_API_KEY is missing from .env.local",
+          error:
+            "GROQ_API_KEY is missing from .env.local",
         },
         { status: 500 }
       );
     }
 
-    // The frontend sends FormData.
+    // ============================================================
+    // READ FORM DATA
+    // ============================================================
+
     const formData = await request.formData();
 
     const audio = formData.get("audio");
@@ -27,6 +42,10 @@ export async function POST(request: Request) {
       );
     }
 
+    // ============================================================
+    // CHECK AUDIO
+    // ============================================================
+
     if (audio.size === 0) {
       return NextResponse.json(
         {
@@ -36,43 +55,23 @@ export async function POST(request: Request) {
       );
     }
 
-    // Send the audio to OpenAI transcription.
-    const openAIForm = new FormData();
+    // ============================================================
+    // SEND AUDIO TO GROQ WHISPER
+    // ============================================================
 
-    openAIForm.append("file", audio);
-    openAIForm.append("model", "gpt-4o-mini-transcribe");
+    const transcription = await groq.audio.transcriptions.create({
+      file: audio,
+      model: "whisper-large-v3-turbo",
+      response_format: "json",
+    });
 
-    const response = await fetch(
-      "https://api.openai.com/v1/audio/transcriptions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: openAIForm,
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("OpenAI transcription error:", data);
-
-      return NextResponse.json(
-        {
-          error:
-            data?.error?.message ||
-            "Could not transcribe your voice.",
-        },
-        {
-          status: response.status,
-        }
-      );
-    }
+    // ============================================================
+    // GET TRANSCRIPTION
+    // ============================================================
 
     const text =
-      typeof data?.text === "string"
-        ? data.text.trim()
+      typeof transcription.text === "string"
+        ? transcription.text.trim()
         : "";
 
     if (!text) {
@@ -84,11 +83,41 @@ export async function POST(request: Request) {
       );
     }
 
+    // ============================================================
+    // DEBUG
+    // ============================================================
+
+    console.log(
+      "========== GROQ TRANSCRIPTION =========="
+    );
+
+    console.log(text);
+
+    console.log(
+      "========================================="
+    );
+
+    // ============================================================
+    // RETURN TEXT
+    // ============================================================
+
     return NextResponse.json({
       text,
     });
   } catch (error) {
-    console.error("Transcription route error:", error);
+    // ============================================================
+    // ERROR HANDLING
+    // ============================================================
+
+    console.error(
+      "========== GROQ TRANSCRIPTION ERROR =========="
+    );
+
+    console.error(error);
+
+    console.error(
+      "==============================================="
+    );
 
     return NextResponse.json(
       {

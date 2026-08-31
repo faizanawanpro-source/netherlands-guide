@@ -14,13 +14,43 @@ type Profile = {
   documents?: string[];
 };
 
-type RealtimeEvent = {
-  type?: string;
-  name?: string;
-  call_id?: string;
-  arguments?: string | Record<string, unknown>;
+type GeminiMessage = {
+  setupComplete?: unknown;
+
   error?: {
     message?: string;
+  };
+
+  serverContent?: {
+    modelTurn?: {
+      parts?: Array<{
+        inlineData?: {
+          data?: string;
+          mimeType?: string;
+        };
+      }>;
+    };
+
+    inputTranscription?: {
+      text?: string;
+    };
+
+    outputTranscription?: {
+      text?: string;
+    };
+
+    interrupted?: boolean;
+    turnComplete?: boolean;
+  };
+
+  toolCall?: {
+    functionCalls?: Array<{
+      id?: string;
+      name?: string;
+      args?: {
+        path?: string;
+      };
+    }>;
   };
 };
 
@@ -54,20 +84,49 @@ export default function VoiceAssistant() {
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState("");
 
-  const peerConnectionRef =
-    useRef<RTCPeerConnection | null>(null);
-
-  const dataChannelRef =
-    useRef<RTCDataChannel | null>(null);
+  const websocketRef =
+    useRef<WebSocket | null>(null);
 
   const microphoneStreamRef =
     useRef<MediaStream | null>(null);
 
-  const audioElementRef =
-    useRef<HTMLAudioElement | null>(null);
+  const microphoneContextRef =
+    useRef<AudioContext | null>(null);
+
+  const microphoneSourceRef =
+    useRef<MediaStreamAudioSourceNode | null>(null);
+
+  const processorRef =
+    useRef<ScriptProcessorNode | null>(null);
+
+  const outputContextRef =
+    useRef<AudioContext | null>(null);
+
+  const nextAudioTimeRef =
+    useRef(0);
+
+  const audioSourcesRef =
+    useRef<AudioBufferSourceNode[]>([]);
 
   const isNavigatingRef =
     useRef(false);
+
+  const microphoneStartedRef =
+    useRef(false);
+
+  const greetingSentRef =
+    useRef(false);
+
+  /*
+   * Prevent the same user sentence from
+   * triggering navigation multiple times.
+   */
+  const lastNavigationTextRef =
+    useRef("");
+
+  // ============================================================
+  // LOAD PROFILE
+  // ============================================================
 
   useEffect(() => {
     try {
@@ -77,7 +136,9 @@ export default function VoiceAssistant() {
         );
 
       if (saved) {
-        setProfile(JSON.parse(saved));
+        setProfile(
+          JSON.parse(saved)
+        );
       }
     } catch (error) {
       console.error(
@@ -87,9 +148,13 @@ export default function VoiceAssistant() {
     }
   }, []);
 
+  // ============================================================
+  // CLEANUP ON UNMOUNT
+  // ============================================================
+
   useEffect(() => {
     return () => {
-      disconnectVoice();
+      cleanup();
     };
   }, []);
 
@@ -98,11 +163,13 @@ export default function VoiceAssistant() {
   // ============================================================
 
   function getProfileLanguage() {
-    const language = String(
-      profile?.language || "English"
-    )
-      .trim()
-      .toLowerCase();
+    const language =
+      String(
+        profile?.language ||
+          "English"
+      )
+        .trim()
+        .toLowerCase();
 
     if (
       language.includes("urdu") ||
@@ -188,7 +255,6 @@ export default function VoiceAssistant() {
     if (
       language.includes("russian") ||
       language.includes("русский") ||
-      language.includes("русский язык") ||
       language === "ru"
     ) {
       return "Russian";
@@ -225,334 +291,1891 @@ export default function VoiceAssistant() {
   }
 
   // ============================================================
+  // BASE64
+  // ============================================================
+
+  function arrayBufferToBase64(
+    buffer: ArrayBuffer
+  ) {
+    const bytes =
+      new Uint8Array(buffer);
+
+    let binary = "";
+
+    const chunkSize = 0x8000;
+
+    for (
+      let i = 0;
+      i < bytes.length;
+      i += chunkSize
+    ) {
+      const chunk =
+        bytes.subarray(
+          i,
+          Math.min(
+            i + chunkSize,
+            bytes.length
+          )
+        );
+
+      binary += String.fromCharCode(
+        ...chunk
+      );
+    }
+
+    return btoa(binary);
+  }
+
+  // ============================================================
+  // FLOAT → PCM16
+  // ============================================================
+
+  function floatTo16BitPCM(
+    input: Float32Array
+  ) {
+    const output =
+      new Int16Array(
+        input.length
+      );
+
+    for (
+      let i = 0;
+      i < input.length;
+      i++
+    ) {
+      const sample =
+        Math.max(
+          -1,
+          Math.min(
+            1,
+            input[i]
+          )
+        );
+
+      output[i] =
+        sample < 0
+          ? sample * 0x8000
+          : sample * 0x7fff;
+    }
+
+    return output.buffer;
+  }
+
+  // ============================================================
+  // DOWNSAMPLE → 16 KHZ
+  // ============================================================
+
+  function downsampleTo16k(
+    input: Float32Array,
+    inputSampleRate: number
+  ) {
+    if (
+      inputSampleRate === 16000
+    ) {
+      return input;
+    }
+
+    const ratio =
+      inputSampleRate / 16000;
+
+    const newLength =
+      Math.round(
+        input.length / ratio
+      );
+
+    const result =
+      new Float32Array(
+        newLength
+      );
+
+    let offsetResult = 0;
+    let offsetBuffer = 0;
+
+    while (
+      offsetResult <
+      result.length
+    ) {
+      const nextOffsetBuffer =
+        Math.round(
+          (offsetResult + 1) *
+            ratio
+        );
+
+      let accum = 0;
+      let count = 0;
+
+      for (
+        let i = offsetBuffer;
+        i <
+          nextOffsetBuffer &&
+        i < input.length;
+        i++
+      ) {
+        accum += input[i];
+        count++;
+      }
+
+      result[offsetResult] =
+        count > 0
+          ? accum / count
+          : 0;
+
+      offsetResult++;
+
+      offsetBuffer =
+        nextOffsetBuffer;
+    }
+
+    return result;
+  }
+
+  // ============================================================
+  // SEND AUDIO
+  // ============================================================
+
+  function sendAudioChunk(
+    pcmBuffer: ArrayBuffer
+  ) {
+    const socket =
+      websocketRef.current;
+
+    if (
+      !socket ||
+      socket.readyState !==
+        WebSocket.OPEN
+    ) {
+      return;
+    }
+
+    try {
+      socket.send(
+        JSON.stringify({
+          realtimeInput: {
+            audio: {
+              data:
+                arrayBufferToBase64(
+                  pcmBuffer
+                ),
+              mimeType:
+                "audio/pcm;rate=16000",
+            },
+          },
+        })
+      );
+    } catch (error) {
+      console.error(
+        "Could not send audio:",
+        error
+      );
+    }
+  }
+
+  // ============================================================
+  // STOP ALL AUDIO
+  // ============================================================
+
+  function stopAllAudio() {
+    audioSourcesRef.current.forEach(
+      (source) => {
+        try {
+          source.stop();
+        } catch {}
+      }
+    );
+
+    audioSourcesRef.current = [];
+
+    nextAudioTimeRef.current = 0;
+
+    setSpeaking(false);
+  }
+
+  // ============================================================
+  // PLAY GEMINI AUDIO
+  // ============================================================
+
+  async function playAudio(
+    base64Audio: string
+  ) {
+    try {
+      let context =
+        outputContextRef.current;
+
+      if (!context) {
+        context =
+          new AudioContext({
+            sampleRate: 24000,
+          });
+
+        outputContextRef.current =
+          context;
+      }
+
+      if (
+        context.state ===
+        "suspended"
+      ) {
+        await context.resume();
+      }
+
+      const binary =
+        atob(base64Audio);
+
+      const bytes =
+        new Uint8Array(
+          binary.length
+        );
+
+      for (
+        let i = 0;
+        i < binary.length;
+        i++
+      ) {
+        bytes[i] =
+          binary.charCodeAt(i);
+      }
+
+      const pcm =
+        new Int16Array(
+          bytes.buffer
+        );
+
+      const audioBuffer =
+        context.createBuffer(
+          1,
+          pcm.length,
+          24000
+        );
+
+      const channel =
+        audioBuffer.getChannelData(
+          0
+        );
+
+      for (
+        let i = 0;
+        i < pcm.length;
+        i++
+      ) {
+        channel[i] =
+          pcm[i] / 32768;
+      }
+
+      const source =
+        context.createBufferSource();
+
+      source.buffer =
+        audioBuffer;
+
+      source.connect(
+        context.destination
+      );
+
+      const now =
+        context.currentTime;
+
+      if (
+        nextAudioTimeRef.current <
+        now
+      ) {
+        nextAudioTimeRef.current =
+          now;
+      }
+
+      source.start(
+        nextAudioTimeRef.current
+      );
+
+      audioSourcesRef.current.push(
+        source
+      );
+
+      nextAudioTimeRef.current +=
+        audioBuffer.duration;
+
+      setSpeaking(true);
+
+      source.onended = () => {
+        audioSourcesRef.current =
+          audioSourcesRef.current.filter(
+            (item) =>
+              item !== source
+          );
+
+        if (
+          audioSourcesRef.current
+            .length === 0
+        ) {
+          setSpeaking(false);
+        }
+      };
+    } catch (error) {
+      console.error(
+        "Audio playback error:",
+        error
+      );
+    }
+  }
+
+  // ============================================================
+  // SMART LOCAL NAVIGATION
+  // ============================================================
+  //
+  // This is the important part.
+  //
+  // We do NOT depend only on Gemini's function call.
+  // If the user's transcription clearly matches a section,
+  // we navigate directly from the browser.
+  //
+  // This means:
+  //
+  // "I don't know anything about housing"
+  // → /housing
+  //
+  // "What should I do about transport?"
+  // → /transport
+  //
+  // "I don't understand documents"
+  // → /documents
+  //
+  // ============================================================
+
+  function detectNavigationPath(
+    text: string
+  ): string | null {
+    if (!text) {
+      return null;
+    }
+
+    const normalized =
+      text
+        .toLowerCase()
+        .trim();
+
+    if (!normalized) {
+      return null;
+    }
+
+    // ----------------------------------------------------------
+    // HOUSING
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "housing"
+      ) ||
+      normalized.includes(
+        "house"
+      ) ||
+      normalized.includes(
+        "apartment"
+      ) ||
+      normalized.includes(
+        "room"
+      ) ||
+      normalized.includes(
+        "rent"
+      ) ||
+      normalized.includes(
+        "rental"
+      ) ||
+      normalized.includes(
+        "woning"
+      ) ||
+      normalized.includes(
+        "huis"
+      ) ||
+      normalized.includes(
+        "huur"
+      ) ||
+      normalized.includes(
+        "kamer"
+      )
+    ) {
+      return "/housing";
+    }
+
+    // ----------------------------------------------------------
+    // TRANSPORT
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "transport"
+      ) ||
+      normalized.includes(
+        "public transport"
+      ) ||
+      normalized.includes(
+        "bus"
+      ) ||
+      normalized.includes(
+        "train"
+      ) ||
+      normalized.includes(
+        "tram"
+      ) ||
+      normalized.includes(
+        "metro"
+      ) ||
+      normalized.includes(
+        "ovpay"
+      ) ||
+      normalized.includes(
+        "ov-chipkaart"
+      ) ||
+      normalized.includes(
+        "ov chipkaart"
+      ) ||
+      normalized.includes(
+        "ns"
+      ) ||
+      normalized.includes(
+        "openbaar vervoer"
+      ) ||
+      normalized.includes(
+        "trein"
+      )
+    ) {
+      return "/transport";
+    }
+
+    // ----------------------------------------------------------
+    // PHONE / SIM
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "phone number"
+      ) ||
+      normalized.includes(
+        "dutch number"
+      ) ||
+      normalized.includes(
+        "sim card"
+      ) ||
+      normalized.includes(
+        "sim"
+      ) ||
+      normalized.includes(
+        "mobile number"
+      ) ||
+      normalized.includes(
+        "telefoonnummer"
+      ) ||
+      normalized.includes(
+        "simkaart"
+      )
+    ) {
+      return "/dutch-phone-number";
+    }
+
+    // ----------------------------------------------------------
+    // DOCUMENTS / BSN / DIGID
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "document"
+      ) ||
+      normalized.includes(
+        "documents"
+      ) ||
+      normalized.includes(
+        "bsn"
+      ) ||
+      normalized.includes(
+        "digid"
+      ) ||
+      normalized.includes(
+        "digi d"
+      ) ||
+      normalized.includes(
+        "residence permit"
+      ) ||
+      normalized.includes(
+        "residence card"
+      ) ||
+      normalized.includes(
+        "passport"
+      ) ||
+      normalized.includes(
+        "letter"
+      ) ||
+      normalized.includes(
+        "documenten"
+      ) ||
+      normalized.includes(
+        "brief"
+      )
+    ) {
+      return "/documents";
+    }
+
+    // ----------------------------------------------------------
+    // HEALTHCARE
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "healthcare"
+      ) ||
+      normalized.includes(
+        "health care"
+      ) ||
+      normalized.includes(
+        "doctor"
+      ) ||
+      normalized.includes(
+        "hospital"
+      ) ||
+      normalized.includes(
+        "huisarts"
+      ) ||
+      normalized.includes(
+        "dokter"
+      ) ||
+      normalized.includes(
+        "zorgverzekering"
+      ) ||
+      normalized.includes(
+        "health insurance"
+      ) ||
+      normalized.includes(
+        "medicine"
+      ) ||
+      normalized.includes(
+        "medication"
+      ) ||
+      normalized.includes(
+        "apotheek"
+      ) ||
+      normalized.includes(
+        "pharmacy"
+      )
+    ) {
+      return "/healthcare";
+    }
+
+    // ----------------------------------------------------------
+    // MONEY
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "money"
+      ) ||
+      normalized.includes(
+        "bank"
+      ) ||
+      normalized.includes(
+        "banking"
+      ) ||
+      normalized.includes(
+        "tax"
+      ) ||
+      normalized.includes(
+        "taxes"
+      ) ||
+      normalized.includes(
+        "benefit"
+      ) ||
+      normalized.includes(
+        "benefits"
+      ) ||
+      normalized.includes(
+        "allowance"
+      ) ||
+      normalized.includes(
+        "toeslag"
+      ) ||
+      normalized.includes(
+        "belasting"
+      ) ||
+      normalized.includes(
+        "geld"
+      ) ||
+      normalized.includes(
+        "bankrekening"
+      )
+    ) {
+      return "/money";
+    }
+
+    // ----------------------------------------------------------
+    // WORK
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "work"
+      ) ||
+      normalized.includes(
+        "job"
+      ) ||
+      normalized.includes(
+        "employment"
+      ) ||
+      normalized.includes(
+        "salary"
+      ) ||
+      normalized.includes(
+        "salaris"
+      ) ||
+      normalized.includes(
+        "baan"
+      ) ||
+      normalized.includes(
+        "werken"
+      ) ||
+      normalized.includes(
+        "werk"
+      )
+    ) {
+      return "/work";
+    }
+
+    // ----------------------------------------------------------
+    // STUDY
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "study"
+      ) ||
+      normalized.includes(
+        "studying"
+      ) ||
+      normalized.includes(
+        "school"
+      ) ||
+      normalized.includes(
+        "university"
+      ) ||
+      normalized.includes(
+        "college"
+      ) ||
+      normalized.includes(
+        "education"
+      ) ||
+      normalized.includes(
+        "student"
+      ) ||
+      normalized.includes(
+        "studie"
+      ) ||
+      normalized.includes(
+        "opleiding"
+      ) ||
+      normalized.includes(
+        "universiteit"
+      )
+    ) {
+      return "/study";
+    }
+
+    // ----------------------------------------------------------
+    // MUNICIPALITY
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "municipality"
+      ) ||
+      normalized.includes(
+        "gemeente"
+      ) ||
+      normalized.includes(
+        "registration"
+      ) ||
+      normalized.includes(
+        "register"
+      ) ||
+      normalized.includes(
+        "registering"
+      ) ||
+      normalized.includes(
+        "gemeentehuis"
+      )
+    ) {
+      return "/municipality";
+    }
+
+    // ----------------------------------------------------------
+    // VEHICLES / DRIVING / PARKING
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "car"
+      ) ||
+      normalized.includes(
+        "driving"
+      ) ||
+      normalized.includes(
+        "driving licence"
+      ) ||
+      normalized.includes(
+        "driving license"
+      ) ||
+      normalized.includes(
+        "parking"
+      ) ||
+      normalized.includes(
+        "vehicle"
+      ) ||
+      normalized.includes(
+        "auto"
+      ) ||
+      normalized.includes(
+        "rijbewijs"
+      ) ||
+      normalized.includes(
+        "parkeren"
+      )
+    ) {
+      return "/vehicles";
+    }
+
+    // ----------------------------------------------------------
+    // WASTE
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "waste"
+      ) ||
+      normalized.includes(
+        "trash"
+      ) ||
+      normalized.includes(
+        "garbage"
+      ) ||
+      normalized.includes(
+        "recycling"
+      ) ||
+      normalized.includes(
+        "afval"
+      ) ||
+      normalized.includes(
+        "vuilnis"
+      ) ||
+      normalized.includes(
+        "recycle"
+      )
+    ) {
+      return "/waste";
+    }
+
+    // ----------------------------------------------------------
+    // EXPLORE
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "things to do"
+      ) ||
+      normalized.includes(
+        "activities"
+      ) ||
+      normalized.includes(
+        "places to visit"
+      ) ||
+      normalized.includes(
+        "what can I do"
+      ) ||
+      normalized.includes(
+        "explore"
+      ) ||
+      normalized.includes(
+        "activiteiten"
+      ) ||
+      normalized.includes(
+        "uitjes"
+      )
+    ) {
+      return "/explore";
+    }
+
+    // ----------------------------------------------------------
+    // PLAN DAY
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "plan my day"
+      ) ||
+      normalized.includes(
+        "plan today"
+      ) ||
+      normalized.includes(
+        "what should I do today"
+      ) ||
+      normalized.includes(
+        "today"
+      ) ||
+      normalized.includes(
+        "vandaag"
+      ) ||
+      normalized.includes(
+        "dag plannen"
+      )
+    ) {
+      return "/plan-day";
+    }
+
+    // ----------------------------------------------------------
+    // TRIP PLANNER
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "trip"
+      ) ||
+      normalized.includes(
+        "travel"
+      ) ||
+      normalized.includes(
+        "trip planner"
+      ) ||
+      normalized.includes(
+        "holiday"
+      ) ||
+      normalized.includes(
+        "vacation"
+      ) ||
+      normalized.includes(
+        "reis"
+      ) ||
+      normalized.includes(
+        "vakantie"
+      )
+    ) {
+      return "/trip-planner";
+    }
+
+    // ----------------------------------------------------------
+    // SCANNER / LETTER
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "scan this"
+      ) ||
+      normalized.includes(
+        "scan a letter"
+      ) ||
+      normalized.includes(
+        "scan document"
+      ) ||
+      normalized.includes(
+        "what does this letter say"
+      ) ||
+      normalized.includes(
+        "what does this mean"
+      )
+    ) {
+      return "/scanner";
+    }
+
+    // ----------------------------------------------------------
+    // WHAT DO I DO
+    // ----------------------------------------------------------
+
+    if (
+      normalized.includes(
+        "what should i do"
+      ) ||
+      normalized.includes(
+        "what do i do"
+      ) ||
+      normalized.includes(
+        "what can i do"
+      ) ||
+      normalized.includes(
+        "i don't know what to do"
+      ) ||
+      normalized.includes(
+        "i don't understand"
+      ) ||
+      normalized.includes(
+        "help me"
+      ) ||
+      normalized.includes(
+        "wat moet ik doen"
+      )
+    ) {
+      return "/what-do-i-do";
+    }
+
+    return null;
+  }
+
+  // ============================================================
+  // NAVIGATION
+  // ============================================================
+
+  function navigateToPage(
+    path: string
+  ) {
+    if (
+      !ALLOWED_PATHS.has(path)
+    ) {
+      console.error(
+        "Blocked navigation:",
+        path
+      );
+
+      return false;
+    }
+
+    if (
+      isNavigatingRef.current
+    ) {
+      return false;
+    }
+
+    isNavigatingRef.current =
+      true;
+
+    console.log(
+      "🧭 ACTUALLY NAVIGATING:",
+      path
+    );
+
+    /*
+     * Stop queued Gemini audio so the
+     * assistant doesn't continue talking
+     * while the page changes.
+     */
+    stopAllAudio();
+
+    try {
+      router.push(path);
+    } catch (error) {
+      console.error(
+        "Router navigation failed:",
+        error
+      );
+
+      isNavigatingRef.current =
+        false;
+
+      return false;
+    }
+
+    window.setTimeout(() => {
+      isNavigatingRef.current =
+        false;
+    }, 1500);
+
+    return true;
+  }
+
+  // ============================================================
+  // NAVIGATE FROM USER'S TRANSCRIPTION
+  // ============================================================
+
+  function handleUserTranscription(
+    text: string
+  ) {
+    if (!text) {
+      return;
+    }
+
+    console.log(
+      "👤 USER:",
+      text
+    );
+
+    const normalized =
+      text
+        .toLowerCase()
+        .trim();
+
+    /*
+     * Ignore exactly repeated
+     * transcription events.
+     */
+    if (
+      normalized ===
+      lastNavigationTextRef.current
+    ) {
+      return;
+    }
+
+    lastNavigationTextRef.current =
+      normalized;
+
+    const path =
+      detectNavigationPath(
+        normalized
+      );
+
+    if (!path) {
+      return;
+    }
+
+    console.log(
+      "🧭 LOCAL NAVIGATION DETECTED:",
+      {
+        text,
+        path,
+      }
+    );
+
+    navigateToPage(path);
+  }
+
+  // ============================================================
+  // TOOL RESPONSE
+  // ============================================================
+
+  function sendToolResponse(
+    id: string,
+    name: string,
+    path: string,
+    success: boolean
+  ) {
+    const socket =
+      websocketRef.current;
+
+    if (
+      !socket ||
+      socket.readyState !==
+        WebSocket.OPEN
+    ) {
+      return;
+    }
+
+    try {
+      socket.send(
+        JSON.stringify({
+          toolResponse: {
+            functionResponses: [
+              {
+                id,
+                name,
+                response: {
+                  success,
+                  path,
+                },
+              },
+            ],
+          },
+        })
+      );
+
+      console.log(
+        "📤 Tool response sent:",
+        {
+          id,
+          path,
+          success,
+        }
+      );
+    } catch (error) {
+      console.error(
+        "Could not send tool response:",
+        error
+      );
+    }
+  }
+
+  // ============================================================
+  // MICROPHONE
+  // ============================================================
+
+  async function startMicrophoneProcessing(
+    stream: MediaStream
+  ) {
+    if (
+      microphoneStartedRef.current
+    ) {
+      return;
+    }
+
+    microphoneStartedRef.current =
+      true;
+
+    try {
+      const context =
+        new AudioContext();
+
+      microphoneContextRef.current =
+        context;
+
+      await context.resume();
+
+      const source =
+        context.createMediaStreamSource(
+          stream
+        );
+
+      microphoneSourceRef.current =
+        source;
+
+      const processor =
+        context.createScriptProcessor(
+          4096,
+          1,
+          1
+        );
+
+      processorRef.current =
+        processor;
+
+      processor.onaudioprocess =
+        (event) => {
+          const input =
+            event.inputBuffer.getChannelData(
+              0
+            );
+
+          const downsampled =
+            downsampleTo16k(
+              input,
+              context.sampleRate
+            );
+
+          const pcm =
+            floatTo16BitPCM(
+              downsampled
+            );
+
+          sendAudioChunk(pcm);
+
+          setListening(true);
+        };
+
+      source.connect(
+        processor
+      );
+
+      processor.connect(
+        context.destination
+      );
+
+      console.log(
+        "🎤 Microphone streaming started."
+      );
+    } catch (error) {
+      microphoneStartedRef.current =
+        false;
+
+      console.error(
+        "Microphone processing error:",
+        error
+      );
+
+      throw error;
+    }
+  }
+
+  // ============================================================
+  // GEMINI MESSAGE
+  // ============================================================
+
+  async function handleGeminiMessage(
+    data: GeminiMessage
+  ) {
+    console.log(
+      "📩 Gemini:",
+      data
+    );
+
+    // ----------------------------------------------------------
+    // ERROR
+    // ----------------------------------------------------------
+
+    if (data.error) {
+      console.error(
+        "Gemini server error:",
+        data.error
+      );
+
+      setError(
+        data.error.message ||
+          "Gemini returned an error."
+      );
+
+      return;
+    }
+
+    // ----------------------------------------------------------
+    // SETUP COMPLETE
+    // ----------------------------------------------------------
+
+    if (data.setupComplete) {
+      console.log(
+        "✅ Gemini setup complete."
+      );
+
+      setConnected(true);
+      setConnecting(false);
+
+      const stream =
+        microphoneStreamRef.current;
+
+      if (stream) {
+        try {
+          await startMicrophoneProcessing(
+            stream
+          );
+        } catch (error) {
+          console.error(
+            "Could not start microphone:",
+            error
+          );
+
+          setError(
+            "Could not start microphone streaming."
+          );
+        }
+      }
+
+      /*
+       * ONE greeting only.
+       */
+      if (
+        !greetingSentRef.current
+      ) {
+        greetingSentRef.current =
+          true;
+
+        const socket =
+          websocketRef.current;
+
+        if (
+          socket &&
+          socket.readyState ===
+            WebSocket.OPEN
+        ) {
+          socket.send(
+            JSON.stringify({
+              clientContent: {
+                turns: [
+                  {
+                    role: "user",
+                    parts: [
+                      {
+                        text: `
+Give one very short, warm welcome.
+
+Speak only in ${getProfileLanguage()}.
+
+This is the first greeting of the session.
+
+Do not explain anything.
+
+Do not mention AI, technology, APIs, code or systems.
+
+Use the language from your first word.
+
+Keep it natural and conversational.
+                        `.trim(),
+                      },
+                    ],
+                  },
+                ],
+                turnComplete: true,
+              },
+            })
+          );
+
+          console.log(
+            "👋 One-time greeting requested."
+          );
+        }
+      }
+
+      return;
+    }
+
+    // ----------------------------------------------------------
+    // INTERRUPTION
+    // ----------------------------------------------------------
+
+    if (
+      data.serverContent?.interrupted
+    ) {
+      console.log(
+        "🛑 Gemini interrupted."
+      );
+
+      stopAllAudio();
+    }
+
+    // ----------------------------------------------------------
+    // AUDIO
+    // ----------------------------------------------------------
+
+    const audioParts =
+      data.serverContent
+        ?.modelTurn
+        ?.parts || [];
+
+    for (
+      const part of audioParts
+    ) {
+      const inlineData =
+        part?.inlineData;
+
+      if (
+        inlineData?.data &&
+        inlineData?.mimeType?.startsWith(
+          "audio/pcm"
+        )
+      ) {
+        await playAudio(
+          inlineData.data
+        );
+      }
+    }
+
+    // ----------------------------------------------------------
+    // INPUT TRANSCRIPTION
+    // ----------------------------------------------------------
+
+    const inputText =
+      data.serverContent
+        ?.inputTranscription
+        ?.text;
+
+    if (inputText) {
+      handleUserTranscription(
+        inputText
+      );
+    }
+
+    // ----------------------------------------------------------
+    // OUTPUT TRANSCRIPTION
+    // ----------------------------------------------------------
+
+    const outputText =
+      data.serverContent
+        ?.outputTranscription
+        ?.text;
+
+    if (outputText) {
+      console.log(
+        "🤖 GEMINI:",
+        outputText
+      );
+    }
+
+    // ----------------------------------------------------------
+    // FUNCTION CALL
+    // ----------------------------------------------------------
+
+    const functionCalls =
+      data.toolCall
+        ?.functionCalls;
+
+    if (functionCalls) {
+      console.log(
+        "🧭 FUNCTION CALLS RECEIVED:",
+        functionCalls
+      );
+
+      for (
+        const functionCall of
+          functionCalls
+      ) {
+        if (
+          functionCall.name !==
+          "navigate_to_page"
+        ) {
+          continue;
+        }
+
+        const path =
+          functionCall.args
+            ?.path;
+
+        const id =
+          functionCall.id;
+
+        console.log(
+          "🧭 GEMINI NAVIGATION REQUEST:",
+          {
+            path,
+            id,
+          }
+        );
+
+        if (
+          !id ||
+          typeof path !==
+            "string"
+        ) {
+          console.error(
+            "Invalid navigation function call."
+          );
+
+          continue;
+        }
+
+        const success =
+          navigateToPage(path);
+
+        sendToolResponse(
+          id,
+          "navigate_to_page",
+          path,
+          success
+        );
+      }
+    }
+
+    // ----------------------------------------------------------
+    // TURN COMPLETE
+    // ----------------------------------------------------------
+
+    if (
+      data.serverContent
+        ?.turnComplete
+    ) {
+      setListening(false);
+    }
+  }
+
+  // ============================================================
+  // PARSE WEBSOCKET
+  // ============================================================
+
+  async function parseWebSocketMessage(
+    event: MessageEvent
+  ) {
+    try {
+      if (
+        typeof event.data ===
+        "string"
+      ) {
+        return JSON.parse(
+          event.data
+        );
+      }
+
+      if (
+        typeof Blob !==
+          "undefined" &&
+        event.data instanceof
+          Blob
+      ) {
+        const text =
+          await event.data.text();
+
+        return JSON.parse(text);
+      }
+
+      if (
+        event.data instanceof
+        ArrayBuffer
+      ) {
+        const text =
+          new TextDecoder().decode(
+            new Uint8Array(
+              event.data
+            )
+          );
+
+        return JSON.parse(text);
+      }
+
+      if (
+        event.data &&
+        typeof event.data ===
+          "object"
+      ) {
+        console.warn(
+          "Unsupported WebSocket data:",
+          event.data
+        );
+
+        return null;
+      }
+
+      return null;
+    } catch (error) {
+      console.error(
+        "❌ Could not decode Gemini WebSocket message:",
+        error
+      );
+
+      return null;
+    }
+  }
+
+  // ============================================================
   // START VOICE
   // ============================================================
 
   async function startVoice() {
-    if (connecting || connected) {
+    if (
+      connecting ||
+      connected
+    ) {
       return;
     }
 
     setError("");
     setConnecting(true);
 
+    microphoneStartedRef.current =
+      false;
+
+    greetingSentRef.current =
+      false;
+
+    lastNavigationTextRef.current =
+      "";
+
     try {
+      // --------------------------------------------------------
+      // MICROPHONE
+      // --------------------------------------------------------
+
       if (
         !navigator.mediaDevices ||
-        !navigator.mediaDevices.getUserMedia
+        !navigator.mediaDevices
+          .getUserMedia
       ) {
         throw new Error(
-          "Microphone access is not available on this device."
+          "Microphone access is not available."
         );
       }
 
-      // ----------------------------------------------------------
-      // MICROPHONE
-      // ----------------------------------------------------------
-
-      const mediaStream =
-        await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            channelCount: 1,
-          },
-        });
+      const stream =
+        await navigator.mediaDevices.getUserMedia(
+          {
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              channelCount: 1,
+            },
+          }
+        );
 
       microphoneStreamRef.current =
-        mediaStream;
+        stream;
 
-      // ----------------------------------------------------------
-      // GET EPHEMERAL KEY
-      // ----------------------------------------------------------
+      console.log(
+        "🎤 Microphone permission granted."
+      );
+
+      // --------------------------------------------------------
+      // TOKEN
+      // --------------------------------------------------------
 
       const tokenResponse =
-        await fetch("/api/realtime", {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            profile,
-          }),
-        });
-
-      const tokenData =
-        await tokenResponse.json();
-
-      if (!tokenResponse.ok) {
-        throw new Error(
-          tokenData?.error ||
-            "Could not create the voice session."
-        );
-      }
-
-      const ephemeralKey =
-        tokenData?.client_secret;
-
-      if (!ephemeralKey) {
-        throw new Error(
-          "Realtime client secret was not returned."
-        );
-      }
-
-      // ----------------------------------------------------------
-      // WEBRTC
-      // ----------------------------------------------------------
-
-      const peerConnection =
-        new RTCPeerConnection();
-
-      peerConnectionRef.current =
-        peerConnection;
-
-      // ----------------------------------------------------------
-      // AUDIO
-      // ----------------------------------------------------------
-
-      const audioElement =
-        document.createElement("audio");
-
-      audioElement.autoplay = true;
-      audioElement.setAttribute(
-        "playsinline",
-        "true"
-      );
-      audioElement.volume = 1;
-
-      audioElementRef.current =
-        audioElement;
-
-      peerConnection.ontrack =
-        (event) => {
-          const stream =
-            event.streams?.[0];
-
-          if (
-            stream &&
-            audioElementRef.current
-          ) {
-            audioElementRef.current.srcObject =
-              stream;
-
-            audioElementRef.current
-              .play()
-              .catch((error) => {
-                console.warn(
-                  "Audio playback failed:",
-                  error
-                );
-              });
-          }
-        };
-
-      // ----------------------------------------------------------
-      // MICROPHONE TRACK
-      // ----------------------------------------------------------
-
-      mediaStream
-        .getTracks()
-        .forEach((track) => {
-          peerConnection.addTrack(
-            track,
-            mediaStream
-          );
-        });
-
-      // ----------------------------------------------------------
-      // DATA CHANNEL
-      // ----------------------------------------------------------
-
-      const dataChannel =
-        peerConnection.createDataChannel(
-          "oai-events"
-        );
-
-      dataChannelRef.current =
-        dataChannel;
-
-      dataChannel.onopen = () => {
-        console.log(
-          "Realtime voice connected."
-        );
-
-        setConnected(true);
-        setConnecting(false);
-
-        // Initial greeting
-        sendEvent({
-          type: "response.create",
-
-          response: {
-            instructions: `
-Give a short, warm and genuinely friendly greeting.
-
-Speak ONLY in ${getProfileLanguage()}.
-
-You are a caring female voice assistant.
-
-Sound natural, relaxed and happy to help.
-
-Do not sound robotic, formal, scripted or like a call centre.
-
-Use the user's preferred language from your very first word.
-
-Do not mention AI, APIs, tools, functions, code or technology.
-
-Keep the greeting short and conversational.
-            `.trim(),
-          },
-        });
-      };
-
-      // ----------------------------------------------------------
-      // EVENTS
-      // ----------------------------------------------------------
-
-      dataChannel.onmessage =
-        (messageEvent) => {
-          try {
-            const serverEvent =
-              JSON.parse(
-                messageEvent.data
-              ) as RealtimeEvent;
-
-            handleRealtimeEvent(
-              serverEvent
-            );
-          } catch (error) {
-            console.error(
-              "Could not parse realtime event:",
-              error
-            );
-          }
-        };
-
-      dataChannel.onerror =
-        (event) => {
-          console.error(
-            "Realtime data channel error:",
-            event
-          );
-
-          setError(
-            "The voice connection encountered a problem."
-          );
-        };
-
-      // ----------------------------------------------------------
-      // CONNECTION STATE
-      // ----------------------------------------------------------
-
-      peerConnection.onconnectionstatechange =
-        () => {
-          const state =
-            peerConnection.connectionState;
-
-          console.log(
-            "Realtime connection:",
-            state
-          );
-
-          if (state === "connected") {
-            setConnected(true);
-            setConnecting(false);
-          }
-
-          if (
-            state === "failed" ||
-            state === "closed"
-          ) {
-            setConnected(false);
-            setListening(false);
-            setSpeaking(false);
-          }
-        };
-
-      // ----------------------------------------------------------
-      // SDP OFFER
-      // ----------------------------------------------------------
-
-      const offer =
-        await peerConnection.createOffer();
-
-      await peerConnection.setLocalDescription(
-        offer
-      );
-
-      if (!offer.sdp) {
-        throw new Error(
-          "Could not create the WebRTC offer."
-        );
-      }
-
-      // ----------------------------------------------------------
-      // OPENAI REALTIME
-      // ----------------------------------------------------------
-
-      const realtimeResponse =
         await fetch(
-          "https://api.openai.com/v1/realtime/calls",
+          "/api/realtime",
           {
             method: "POST",
 
             headers: {
-              Authorization:
-                `Bearer ${ephemeralKey}`,
-
               "Content-Type":
-                "application/sdp",
-
-              Accept:
-                "application/sdp",
+                "application/json",
             },
 
-            body: offer.sdp,
+            body: JSON.stringify({
+              profile,
+            }),
           }
         );
 
-      if (!realtimeResponse.ok) {
-        const errorText =
-          await realtimeResponse.text();
+      const tokenData =
+        await tokenResponse.json();
 
-        console.error(
-          "Realtime connection failed:",
-          errorText
-        );
-
+      if (
+        !tokenResponse.ok
+      ) {
         throw new Error(
-          errorText ||
-            "Could not connect to the voice service."
+          tokenData?.error ||
+            "Could not create Gemini realtime token."
         );
       }
 
-      const answerSdp =
-        await realtimeResponse.text();
-
-      await peerConnection.setRemoteDescription(
-        {
-          type: "answer",
-          sdp: answerSdp,
-        }
-      );
+      if (
+        !tokenData?.token
+      ) {
+        throw new Error(
+          "Gemini realtime token was not returned."
+        );
+      }
 
       console.log(
-        "Realtime voice session started."
+        "🔑 Ephemeral token received."
       );
+
+      // --------------------------------------------------------
+      // WEBSOCKET
+      // --------------------------------------------------------
+
+      const socketUrl =
+        `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(
+          tokenData.token
+        )}`;
+
+      console.log(
+        "🔌 Connecting to Gemini Live..."
+      );
+
+      const socket =
+        new WebSocket(
+          socketUrl
+        );
+
+      websocketRef.current =
+        socket;
+
+      // --------------------------------------------------------
+      // OPEN
+      // --------------------------------------------------------
+
+      socket.onopen = () => {
+        console.log(
+          "✅ WebSocket opened."
+        );
+
+        try {
+          socket.send(
+            JSON.stringify({
+              setup: {
+                model:
+                  `models/${tokenData.model}`,
+
+                generationConfig: {
+                  responseModalities: [
+                    "AUDIO",
+                  ],
+
+                  temperature: 0.7,
+                },
+
+                inputAudioTranscription:
+                  {},
+
+                outputAudioTranscription:
+                  {},
+
+                realtimeInputConfig: {
+                  automaticActivityDetection:
+                    {},
+                },
+
+                tools: [
+                  {
+                    functionDeclarations:
+                      [
+                        {
+                          name:
+                            "navigate_to_page",
+
+                          description:
+                            `
+Navigate the user to a relevant Netherlands Guide page.
+
+Use this when the user clearly needs information or help from one of the available sections.
+
+Examples:
+
+If the user says:
+"I don't know anything about housing"
+"I need help finding a place to live"
+"I don't understand housing in the Netherlands"
+
+Navigate to /housing.
+
+If the user says:
+"What should I do about transport?"
+"I don't understand public transport"
+"How does OVpay work?"
+
+Navigate to /transport.
+
+If the user says:
+"I don't understand my documents"
+"I need help with BSN or DigiD"
+
+Navigate to /documents.
+
+If the user says:
+"I need help with healthcare"
+"I don't know how doctors work here"
+
+Navigate to /healthcare.
+
+If the user says:
+"I don't understand money, taxes or benefits"
+
+Navigate to /money.
+
+If the user says:
+"I need help finding a job"
+
+Navigate to /work.
+
+If the user says:
+"I don't understand studying here"
+
+Navigate to /study.
+
+If the user says:
+"I need help with registration or the municipality"
+
+Navigate to /municipality.
+
+If the user says:
+"I need help with my car, driving or parking"
+
+Navigate to /vehicles.
+
+If the user says:
+"I don't understand waste collection"
+
+Navigate to /waste.
+
+Do not navigate for casual conversation.
+
+Do not navigate merely because a random word matches.
+
+When a relevant section is clearly needed, navigation is useful.
+                          `.trim(),
+
+                          parameters: {
+                            type:
+                              "OBJECT",
+
+                            properties: {
+                              path: {
+                                type:
+                                  "STRING",
+
+                                enum: [
+                                  "/dashboard",
+                                  "/dutch-phone-number",
+                                  "/housing",
+                                  "/documents",
+                                  "/healthcare",
+                                  "/money",
+                                  "/work",
+                                  "/study",
+                                  "/transport",
+                                  "/municipality",
+                                  "/vehicles",
+                                  "/waste",
+                                  "/explore",
+                                  "/plan-day",
+                                  "/trip-planner",
+                                  "/scanner",
+                                  "/what-do-i-do",
+                                ],
+                              },
+                            },
+
+                            required: [
+                              "path",
+                            ],
+                          },
+                        },
+                      ],
+                  },
+                ],
+              },
+            })
+          );
+
+          console.log(
+            "📤 Setup message sent."
+          );
+        } catch (error) {
+          console.error(
+            "Could not send setup:",
+            error
+          );
+
+          setError(
+            "Could not initialize Gemini Live."
+          );
+        }
+      };
+
+      // --------------------------------------------------------
+      // MESSAGE
+      // --------------------------------------------------------
+
+      socket.onmessage =
+        async (event) => {
+          const data =
+            await parseWebSocketMessage(
+              event
+            );
+
+          if (!data) {
+            return;
+          }
+
+          await handleGeminiMessage(
+            data
+          );
+        };
+
+      // --------------------------------------------------------
+      // ERROR
+      // --------------------------------------------------------
+
+      socket.onerror =
+        (event) => {
+          console.error(
+            "❌ WebSocket error:",
+            event
+          );
+
+          setError(
+            "Gemini voice connection encountered a problem."
+          );
+
+          setConnecting(false);
+        };
+
+      // --------------------------------------------------------
+      // CLOSE
+      // --------------------------------------------------------
+
+      socket.onclose =
+        (event) => {
+          console.log(
+            "🔴 WebSocket closed.",
+            {
+              code: event.code,
+              reason: event.reason,
+            }
+          );
+
+          setConnected(false);
+          setConnecting(false);
+          setListening(false);
+
+          stopAllAudio();
+
+          microphoneStartedRef.current =
+            false;
+        };
     } catch (error) {
       console.error(
-        "Voice connection error:",
+        "❌ Voice startup error:",
         error
       );
+
+      cleanup();
 
       setConnecting(false);
       setConnected(false);
       setListening(false);
       setSpeaking(false);
-
-      cleanupConnections();
 
       setError(
         error instanceof Error
@@ -563,278 +2186,24 @@ Keep the greeting short and conversational.
   }
 
   // ============================================================
-  // REALTIME EVENTS
-  // ============================================================
-
-  function handleRealtimeEvent(
-    event: RealtimeEvent
-  ) {
-    console.log(
-      "Realtime event:",
-      event.type
-    );
-
-    switch (event.type) {
-      case "input_audio_buffer.speech_started":
-        setListening(true);
-        setSpeaking(false);
-        break;
-
-      case "input_audio_buffer.speech_stopped":
-        setListening(false);
-        break;
-
-      case "response.audio.delta":
-        setSpeaking(true);
-        setListening(false);
-        break;
-
-      case "response.audio.done":
-        setSpeaking(false);
-        break;
-
-      case "response.done":
-        setSpeaking(false);
-        break;
-
-      case "response.function_call_arguments.done":
-        handleFunctionCall(event);
-        break;
-
-      case "error":
-        console.error(
-          "Realtime API error:",
-          event
-        );
-
-        setError(
-          event?.error?.message ||
-            "The voice assistant encountered an error."
-        );
-
-        setSpeaking(false);
-        setListening(false);
-        break;
-
-      default:
-        break;
-    }
-  }
-
-  // ============================================================
-  // NAVIGATION
-  // ============================================================
-
-  function handleFunctionCall(
-    event: RealtimeEvent
-  ) {
-    console.log(
-      "🧭 NAVIGATION FUNCTION CALLED",
-      event
-    );
-
-    if (
-      event.name !==
-      "navigate_to_page"
-    ) {
-      return;
-    }
-
-    if (isNavigatingRef.current) {
-      return;
-    }
-
-    try {
-      const args =
-        typeof event.arguments ===
-        "string"
-          ? JSON.parse(
-              event.arguments
-            )
-          : event.arguments;
-
-      const destination =
-        args &&
-        typeof args === "object" &&
-        "path" in args
-          ? (
-              args as {
-                path?: unknown;
-              }
-            ).path
-          : null;
-
-      if (
-        typeof destination !==
-        "string"
-      ) {
-        console.error(
-          "Invalid navigation destination:",
-          destination
-        );
-
-        return;
-      }
-
-      if (
-        !ALLOWED_PATHS.has(
-          destination
-        )
-      ) {
-        console.error(
-          "Navigation path not allowed:",
-          destination
-        );
-
-        return;
-      }
-
-      isNavigatingRef.current =
-        true;
-
-      console.log(
-        "🧭 NAVIGATING TO:",
-        destination
-      );
-
-      // ----------------------------------------------------------
-      // CONFIRM FUNCTION CALL
-      // ----------------------------------------------------------
-
-      sendEvent({
-        type:
-          "conversation.item.create",
-
-        item: {
-          type:
-            "function_call_output",
-
-          call_id:
-            event.call_id,
-
-          output:
-            JSON.stringify({
-              success: true,
-              path: destination,
-            }),
-        },
-      });
-
-      // ----------------------------------------------------------
-      // NAVIGATE
-      //
-      // IMPORTANT:
-      // We DO NOT disconnect the voice connection.
-      // VoiceAssistant is mounted in layout.tsx.
-      // ----------------------------------------------------------
-
-      router.push(
-        destination
-      );
-
-      // ----------------------------------------------------------
-      // CONTINUE THE CONVERSATION
-      // ----------------------------------------------------------
-
-      window.setTimeout(() => {
-        sendEvent({
-          type:
-            "response.create",
-
-          response: {
-            instructions: `
-The user has now been taken to the relevant section.
-
-Continue helping them naturally.
-
-Do not talk about navigation, routes, tools, functions, APIs or code.
-
-Say something short and friendly that fits the situation.
-
-For example, say the equivalent of:
-"You're there. I'm still with you, so let's sort this out."
-
-Speak only in ${getProfileLanguage()}.
-
-Do not repeat the user's original question.
-
-Keep it conversational and warm.
-            `.trim(),
-          },
-        });
-
-        isNavigatingRef.current =
-          false;
-      }, 500);
-    } catch (error) {
-      console.error(
-        "Navigation error:",
-        error
-      );
-
-      isNavigatingRef.current =
-        false;
-    }
-  }
-
-  // ============================================================
-  // SEND EVENT
-  // ============================================================
-
-  function sendEvent(
-    event: Record<string, unknown>
-  ) {
-    const channel =
-      dataChannelRef.current;
-
-    if (
-      !channel ||
-      channel.readyState !==
-        "open"
-    ) {
-      console.warn(
-        "Realtime channel is not ready."
-      );
-
-      return;
-    }
-
-    try {
-      channel.send(
-        JSON.stringify(event)
-      );
-    } catch (error) {
-      console.error(
-        "Could not send realtime event:",
-        error
-      );
-    }
-  }
-
-  // ============================================================
   // STOP SPEAKING
   // ============================================================
 
   function stopSpeaking() {
-    if (!connected) {
-      return;
-    }
-
-    sendEvent({
-      type:
-        "response.cancel",
-    });
-
-    setSpeaking(false);
+    stopAllAudio();
   }
 
   // ============================================================
   // CLEANUP
   // ============================================================
 
-  function cleanupConnections() {
+  function cleanup() {
     try {
-      dataChannelRef.current?.close();
+      stopAllAudio();
+
+      processorRef.current?.disconnect();
+
+      microphoneSourceRef.current?.disconnect();
 
       microphoneStreamRef.current
         ?.getTracks()
@@ -845,33 +2214,67 @@ Keep it conversational and warm.
       microphoneStreamRef.current =
         null;
 
-      peerConnectionRef.current?.close();
-
-      peerConnectionRef.current =
-        null;
-
-      if (audioElementRef.current) {
-        audioElementRef.current.pause();
-
-        audioElementRef.current.srcObject =
-          null;
+      if (
+        microphoneContextRef.current
+      ) {
+        microphoneContextRef.current
+          .close()
+          .catch(() => {});
       }
 
-      audioElementRef.current =
+      microphoneContextRef.current =
         null;
 
-      dataChannelRef.current =
+      if (
+        outputContextRef.current
+      ) {
+        outputContextRef.current
+          .close()
+          .catch(() => {});
+      }
+
+      outputContextRef.current =
         null;
+
+      if (
+        websocketRef.current
+      ) {
+        try {
+          websocketRef.current.close();
+        } catch {}
+      }
+
+      websocketRef.current =
+        null;
+
+      processorRef.current =
+        null;
+
+      microphoneSourceRef.current =
+        null;
+
+      microphoneStartedRef.current =
+        false;
+
+      greetingSentRef.current =
+        false;
+
+      lastNavigationTextRef.current =
+        "";
     } catch (error) {
       console.error(
-        "Voice cleanup error:",
+        "Cleanup error:",
         error
       );
     }
   }
 
+  // ============================================================
+  // DISCONNECT
+  // ============================================================
+
   function disconnectVoice() {
-    cleanupConnections();
+    cleanup();
 
     setConnected(false);
     setConnecting(false);
@@ -910,7 +2313,9 @@ Keep it conversational and warm.
     <>
       <button
         type="button"
-        onClick={handleVoiceButton}
+        onClick={
+          handleVoiceButton
+        }
         disabled={connecting}
         aria-label={
           connecting
@@ -941,11 +2346,11 @@ Keep it conversational and warm.
             speaking
               ? "bg-green-500 text-white shadow-green-500/50 ring-4 ring-green-200"
               : listening
-              ? "animate-pulse bg-orange-600 text-white shadow-orange-600/50 ring-4 ring-orange-200"
+              ? "animate-pulse bg-orange-500 text-white shadow-orange-500/40 ring-4 ring-orange-200"
               : connecting
               ? "cursor-wait bg-indigo-600 text-white"
               : connected
-              ? "bg-red-500 text-white hover:scale-110"
+              ? "bg-orange-500 text-white hover:scale-110 hover:bg-orange-600 shadow-orange-500/40"
               : "bg-orange-500 text-white hover:scale-110 hover:bg-orange-600"
           }
         `}
@@ -970,7 +2375,7 @@ Keep it conversational and warm.
       {connected &&
         listening &&
         !speaking && (
-          <div className="fixed bottom-24 right-6 z-[9998] rounded-full bg-white px-4 py-2 text-sm font-bold text-orange-600 shadow-xl">
+          <div className="fixed bottom-24 right-6 z-[9998] rounded-full bg-white px-4 py-2 text-sm font-bold text-orange-500 shadow-xl">
             🎤 I'm listening
           </div>
         )}
@@ -985,7 +2390,7 @@ Keep it conversational and warm.
       {connected &&
         !listening &&
         !speaking && (
-          <div className="fixed bottom-24 right-6 z-[9998] rounded-full bg-white px-4 py-2 text-sm font-bold text-red-500 shadow-xl">
+          <div className="fixed bottom-24 right-6 z-[9998] rounded-full bg-white px-4 py-2 text-sm font-bold text-orange-500 shadow-xl">
             🎤 I'm here whenever you need me
           </div>
         )}

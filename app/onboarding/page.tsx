@@ -34,6 +34,20 @@ const languages = [
   "ਪੰਜਾਬੀ",
   "العربية",
   "Türkçe",
+  "中文",
+  "Українська",
+  "فارسی",
+  "پښتو",
+  "Français",
+  "Español",
+  "Deutsch",
+  "Polski",
+  "Português",
+  "Italiano",
+  "Русский",
+  "বাংলা",
+  "Română",
+  "Ελληνικά",
 ];
 
 const familyOptions = [
@@ -1072,3 +1086,4 @@ export default function OnboardingPage() {
     </main>
   );
 }
+
