@@ -93,9 +93,7 @@ export default function VoiceAssistant() {
     useRef<AudioContext | null>(null);
 
   const microphoneSourceRef =
-    useRef<AudioContext extends never ? never : MediaStreamAudioSourceNode | null>(
-      null
-    );
+    useRef<MediaStreamAudioSourceNode | null>(null);
 
   const processorRef =
     useRef<ScriptProcessorNode | null>(null);
@@ -776,6 +774,10 @@ export default function VoiceAssistant() {
       data
     );
 
+    // ----------------------------------------------------------
+    // ERROR
+    // ----------------------------------------------------------
+
     if (data.error) {
       console.error(
         "Gemini server error:",
@@ -789,6 +791,10 @@ export default function VoiceAssistant() {
 
       return;
     }
+
+    // ----------------------------------------------------------
+    // SETUP COMPLETE
+    // ----------------------------------------------------------
 
     if (data.setupComplete) {
       console.log(
@@ -818,6 +824,8 @@ export default function VoiceAssistant() {
         }
       }
 
+      // IMPORTANT:
+      // Greeting can only happen ONCE.
       if (!greetingSentRef.current) {
         greetingSentRef.current = true;
 
@@ -870,6 +878,10 @@ Keep it natural and conversational.
       return;
     }
 
+    // ----------------------------------------------------------
+    // INTERRUPTION
+    // ----------------------------------------------------------
+
     if (
       data.serverContent?.interrupted
     ) {
@@ -879,6 +891,10 @@ Keep it natural and conversational.
 
       stopAllAudio();
     }
+
+    // ----------------------------------------------------------
+    // AUDIO
+    // ----------------------------------------------------------
 
     const audioParts =
       data.serverContent
@@ -903,6 +919,10 @@ Keep it natural and conversational.
       }
     }
 
+    // ----------------------------------------------------------
+    // INPUT TRANSCRIPTION
+    // ----------------------------------------------------------
+
     const inputText =
       data.serverContent
         ?.inputTranscription
@@ -914,6 +934,10 @@ Keep it natural and conversational.
         inputText
       );
     }
+
+    // ----------------------------------------------------------
+    // OUTPUT TRANSCRIPTION
+    // ----------------------------------------------------------
 
     const outputText =
       data.serverContent
@@ -927,9 +951,9 @@ Keep it natural and conversational.
       );
     }
 
-    // ==========================================================
-    // MULTILINGUAL NAVIGATION FUNCTION CALL
-    // ==========================================================
+    // ----------------------------------------------------------
+    // FUNCTION CALL
+    // ----------------------------------------------------------
 
     const functionCalls =
       data.toolCall
@@ -990,6 +1014,10 @@ Keep it natural and conversational.
         );
       }
     }
+
+    // ----------------------------------------------------------
+    // TURN COMPLETE
+    // ----------------------------------------------------------
 
     if (
       data.serverContent
@@ -1086,6 +1114,10 @@ Keep it natural and conversational.
       false;
 
     try {
+      // --------------------------------------------------------
+      // MICROPHONE
+      // --------------------------------------------------------
+
       if (
         !navigator.mediaDevices ||
         !navigator.mediaDevices
@@ -1114,6 +1146,10 @@ Keep it natural and conversational.
       console.log(
         "🎤 Microphone permission granted."
       );
+
+      // --------------------------------------------------------
+      // TOKEN
+      // --------------------------------------------------------
 
       const tokenResponse =
         await fetch(
@@ -1150,6 +1186,10 @@ Keep it natural and conversational.
         "🔑 Ephemeral token received."
       );
 
+      // --------------------------------------------------------
+      // WEBSOCKET
+      // --------------------------------------------------------
+
       const socketUrl =
         `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(
           tokenData.token
@@ -1164,6 +1204,10 @@ Keep it natural and conversational.
 
       websocketRef.current =
         socket;
+
+      // --------------------------------------------------------
+      // OPEN
+      // --------------------------------------------------------
 
       socket.onopen = () => {
         console.log(
@@ -1205,193 +1249,61 @@ Keep it natural and conversational.
 
                           description:
                             `
-You are the navigation assistant for Netherway.
+You control navigation inside the Netherlands Guide app.
 
 IMPORTANT:
-Understand the user's INTENT regardless of the language they speak.
+Understand the user's INTENT, not just exact words.
 
-The user may speak English, Dutch, Urdu, Hindi, Punjabi, Arabic, German, French, Spanish, Turkish, Russian, Ukrainian, Chinese, Farsi, Pashto, or ANY other language you understand.
+The user may speak English, Dutch, Urdu, Hindi, Punjabi, Arabic, German, French, Spanish, Turkish, Russian, Ukrainian, Chinese, Farsi, Pashto, or another language.
 
-Never require the user to speak English.
+You MUST understand requests in any language.
 
-Internally understand or translate the user's request into its meaning, then decide whether one of the Netherway pages is relevant.
-
-The page paths below are INTERNAL navigation paths. Always return the exact path listed below.
-
-NAVIGATION RULES:
-
-1. HOUSING
-Use /housing when the user needs help with:
-- finding a home
-- renting
-- buying a home
-- social housing
-- housing registration
-- rent
-- landlords
-- housing problems
-- understanding how housing works
-- saying they know nothing or understand nothing about housing
-
-Examples of intent:
-"I don't know anything about housing."
-"I don't understand how housing works."
-"Where can I find a house?"
-"I need help finding somewhere to live."
-
-Equivalent requests in ANY language should also navigate to /housing.
-
-2. DOCUMENTS
-Use /documents when the user needs help with:
-- documents
-- letters
-- official letters
-- BSN
-- DigiD
-- residence documents
-- government paperwork
-- understanding an official document
-- what to do with a letter
-
-3. HEALTHCARE
-Use /healthcare when the user needs help with:
-- doctors
-- huisarts
-- hospitals
-- healthcare
-- health insurance
-- medical appointments
-- understanding healthcare in the Netherlands
-
-4. MONEY
-Use /money when the user needs help with:
-- money
-- banking
-- bank accounts
-- benefits
-- taxes
-- payments
-- financial help
-- Dutch financial systems
-
-5. WORK
-Use /work when the user needs help with:
-- finding a job
-- work
-- employment
-- salary
-- employment rights
-- working in the Netherlands
-
-6. STUDY
-Use /study when the user needs help with:
-- school
-- studying
-- education
-- university
-- MBO
-- HBO
-- courses
-- student-related questions
-
-7. TRANSPORT
-Use /transport when the user needs help with:
-- public transport
-- OV-chipkaart
-- OVpay
-- trains
-- buses
-- trams
-- metro
-- NS
-- travelling around the Netherlands
-- understanding Dutch public transport
+When the user asks for information, help, guidance, or says they do not understand what to do about a topic that has a dedicated page, navigate them to the appropriate page.
 
 Examples:
-"I don't understand transport."
-"What should I do about public transport?"
-"How does the train system work?"
 
-Equivalent requests in ANY language should also navigate to /transport.
+- Housing, finding a home, renting, rent, apartment, room, homeless, woning, huisvesting → /housing
+- Documents, paperwork, BSN, DigiD, residence documents, official papers → /documents
+- Healthcare, doctor, huisarts, hospital, health insurance → /healthcare
+- Money, bank, taxes, benefits, financial help → /money
+- Work, job, employment, working in the Netherlands → /work
+- Study, school, education, university, MBO, HBO → /study
+- Transport, OV, train, bus, tram, metro, travelling around Netherlands → /transport
+- Municipality, gemeente, registering at municipality, local government → /municipality
+- Cars, driving, vehicle, driver's license, car registration → /vehicles
+- Waste, garbage, recycling, afval → /waste
+- Dutch phone number, SIM card, mobile number → /dutch-phone-number
+- Planning the day, what to do today → /plan-day
+- Trip planning, planning a trip → /trip-planner
+- Scanning a letter or document → /scanner
+- "What should I do?", "I don't know what to do", or needing guidance about a problem → /what-do-i-do
 
-8. MUNICIPALITY
-Use /municipality when the user needs help with:
-- gemeente
-- municipality
-- registering at the municipality
-- municipal services
-- appointments with the municipality
-- local government
+IMPORTANT:
+Do not require the user to use the exact English page name.
 
-9. VEHICLES
-Use /vehicles when the user needs help with:
-- cars
-- driving
-- vehicle registration
-- car ownership
-- driving-related Dutch systems
-- vehicle questions
+For example:
 
-10. WASTE
-Use /waste when the user needs help with:
-- rubbish
-- trash
-- recycling
-- waste collection
-- recycling rules
-- garbage
+"I don't know anything about housing"
+"I need help finding a house"
+"Ik weet niets over wonen"
+"Ich brauche Hilfe mit einer Wohnung"
+"مجھے گھر کے بارے میں مدد چاہیے"
+"मुझे घर के बारे में समझ नहीं आ रहा"
 
-11. DUTCH PHONE NUMBER
-Use /dutch-phone-number when the user needs help with:
-- getting a Dutch phone number
-- SIM cards
-- mobile phone plans
-- Dutch mobile numbers
+These all indicate /housing.
 
-12. PLAN DAY
-Use /plan-day when the user asks for:
-- planning their day
-- organizing today's activities
-- deciding what to do today
-- creating a daily plan
+Likewise, if the user says they don't understand transport, asks what they should do about public transport, trains, buses, OV-chipkaart, or similar topics, navigate to /transport.
 
-13. TRIP PLANNER
-Use /trip-planner when the user asks to:
-- plan a trip
-- plan travel
-- create an itinerary
-- organize a journey
+If the user clearly needs one of these dedicated pages, CALL this function immediately.
 
-14. SCANNER
-Use /scanner when the user wants to:
-- scan a document
-- scan a letter
-- analyze a document with the scanner
+Do not merely tell the user that you are taking them there.
+Actually call the function.
 
-15. WHAT DO I DO
-Use /what-do-i-do when the user is asking for general guidance such as:
-- "What should I do?"
-- "I don't know what to do."
-- "Help me."
-- "I'm lost and don't know what to do."
+Only navigate when the request is relevant to one of the listed pages.
 
-IMPORTANT INTENT RULES:
+For normal conversation or questions that do not belong to a dedicated page, do not navigate.
 
-- Understand meaning, not exact keywords.
-- A request can be very informal.
-- A user saying "I don't know anything about X" is still a request for help with X.
-- A user saying "I don't understand X" is still a request for help with X.
-- A user asking "What should I do about X?" should normally navigate to the page about X.
-- This applies regardless of language.
-- Do not wait for the user to explicitly say the English name of a page.
-- Do not navigate merely because a random word happens to resemble a page topic.
-- Do not navigate during ordinary conversation when a page is not useful.
-- If the user's intent clearly belongs to a page, call this function.
-- If the request is genuinely ambiguous and no page can reasonably be identified, do not navigate.
-- Never invent a page path.
-- Only use the exact paths listed above.
-
-The function should be called when navigation will genuinely help the user continue with their request.
+Always select the exact path from the available enum values.
                             `.trim(),
 
                           parameters: {
@@ -1452,6 +1364,10 @@ The function should be called when navigation will genuinely help the user conti
         }
       };
 
+      // --------------------------------------------------------
+      // MESSAGE
+      // --------------------------------------------------------
+
       socket.onmessage =
         async (event) => {
           const data =
@@ -1468,6 +1384,10 @@ The function should be called when navigation will genuinely help the user conti
           );
         };
 
+      // --------------------------------------------------------
+      // ERROR
+      // --------------------------------------------------------
+
       socket.onerror = (event) => {
         console.error(
           "❌ WebSocket error:",
@@ -1480,6 +1400,10 @@ The function should be called when navigation will genuinely help the user conti
 
         setConnecting(false);
       };
+
+      // --------------------------------------------------------
+      // CLOSE
+      // --------------------------------------------------------
 
       socket.onclose = (event) => {
         console.log(
