@@ -138,7 +138,7 @@ export default function VoiceAssistant() {
   }, []);
 
   // ============================================================
-  // CLEANUP
+  // CLEANUP ON UNMOUNT
   // ============================================================
 
   useEffect(() => {
@@ -342,7 +342,7 @@ export default function VoiceAssistant() {
   }
 
   // ============================================================
-  // DOWNSAMPLE
+  // DOWNSAMPLE TO 16KHZ
   // ============================================================
 
   function downsampleTo16k(
@@ -487,11 +487,13 @@ export default function VoiceAssistant() {
         await context.resume();
       }
 
-      const binary = atob(base64Audio);
+      const binary =
+        atob(base64Audio);
 
-      const bytes = new Uint8Array(
-        binary.length
-      );
+      const bytes =
+        new Uint8Array(
+          binary.length
+        );
 
       for (
         let i = 0;
@@ -502,9 +504,10 @@ export default function VoiceAssistant() {
           binary.charCodeAt(i);
       }
 
-      const pcm = new Int16Array(
-        bytes.buffer
-      );
+      const pcm =
+        new Int16Array(
+          bytes.buffer
+        );
 
       const audioBuffer =
         context.createBuffer(
@@ -530,7 +533,8 @@ export default function VoiceAssistant() {
       const source =
         context.createBufferSource();
 
-      source.buffer = audioBuffer;
+      source.buffer =
+        audioBuffer;
 
       source.connect(
         context.destination
@@ -563,7 +567,8 @@ export default function VoiceAssistant() {
       source.onended = () => {
         audioSourcesRef.current =
           audioSourcesRef.current.filter(
-            (item) => item !== source
+            (item) =>
+              item !== source
           );
 
         if (
@@ -588,35 +593,75 @@ export default function VoiceAssistant() {
   function navigateToPage(
     path: string
   ) {
-    if (!ALLOWED_PATHS.has(path)) {
+    if (
+      typeof path !== "string"
+    ) {
       console.error(
-        "Blocked navigation:",
+        "Navigation path is not a string:",
         path
       );
 
       return false;
     }
 
-    if (isNavigatingRef.current) {
+    const cleanPath =
+      path.trim();
+
+    if (
+      !ALLOWED_PATHS.has(cleanPath)
+    ) {
+      console.error(
+        "Blocked navigation:",
+        cleanPath
+      );
+
       return false;
     }
 
-    isNavigatingRef.current = true;
+    if (
+      isNavigatingRef.current
+    ) {
+      console.log(
+        "Navigation already in progress."
+      );
+
+      return false;
+    }
+
+    isNavigatingRef.current =
+      true;
 
     console.log(
-      "🧭 ACTUALLY NAVIGATING TO:",
-      path
+      "🧭 NAVIGATING:",
+      cleanPath
     );
 
+    // Stop current Gemini audio.
     stopAllAudio();
 
-    router.push(path);
+    try {
+      router.push(cleanPath);
 
-    window.setTimeout(() => {
-      isNavigatingRef.current = false;
-    }, 1500);
+      // Also refresh the route state after navigation.
+      router.refresh();
 
-    return true;
+      window.setTimeout(() => {
+        isNavigatingRef.current =
+          false;
+      }, 2000);
+
+      return true;
+    } catch (error) {
+      console.error(
+        "Navigation failed:",
+        error
+      );
+
+      isNavigatingRef.current =
+        false;
+
+      return false;
+    }
   }
 
   // ============================================================
@@ -637,6 +682,10 @@ export default function VoiceAssistant() {
       socket.readyState !==
         WebSocket.OPEN
     ) {
+      console.error(
+        "Cannot send tool response because WebSocket is closed."
+      );
+
       return;
     }
 
@@ -659,7 +708,7 @@ export default function VoiceAssistant() {
       );
 
       console.log(
-        "📤 Tool response sent:",
+        "📤 Navigation tool response:",
         {
           id,
           path,
@@ -740,7 +789,9 @@ export default function VoiceAssistant() {
           setListening(true);
         };
 
-      source.connect(processor);
+      source.connect(
+        processor
+      );
 
       processor.connect(
         context.destination
@@ -824,10 +875,15 @@ export default function VoiceAssistant() {
         }
       }
 
-      // IMPORTANT:
-      // Greeting can only happen ONCE.
-      if (!greetingSentRef.current) {
-        greetingSentRef.current = true;
+      // --------------------------------------------------------
+      // ONE GREETING
+      // --------------------------------------------------------
+
+      if (
+        !greetingSentRef.current
+      ) {
+        greetingSentRef.current =
+          true;
 
         const socket =
           websocketRef.current;
@@ -856,7 +912,7 @@ Do not explain anything.
 
 Do not mention AI, technology, APIs, code or systems.
 
-Use the language from your first word.
+Use the requested language from your first word.
 
 Keep it natural and conversational.
                         `.trim(),
@@ -870,7 +926,7 @@ Keep it natural and conversational.
           );
 
           console.log(
-            "👋 One-time greeting requested."
+            "👋 Greeting requested."
           );
         }
       }
@@ -951,15 +1007,18 @@ Keep it natural and conversational.
       );
     }
 
-    // ----------------------------------------------------------
-    // FUNCTION CALL
-    // ----------------------------------------------------------
+    // ==========================================================
+    // NAVIGATION FUNCTION CALL
+    // ==========================================================
 
     const functionCalls =
       data.toolCall
         ?.functionCalls;
 
-    if (functionCalls) {
+    if (
+      functionCalls &&
+      functionCalls.length > 0
+    ) {
       console.log(
         "🧭 FUNCTION CALLS RECEIVED:",
         functionCalls
@@ -984,7 +1043,7 @@ Keep it natural and conversational.
           functionCall.id;
 
         console.log(
-          "🧭 NAVIGATION REQUEST:",
+          "🧭 NAVIGATION REQUEST FROM GEMINI:",
           {
             path,
             id,
@@ -997,7 +1056,8 @@ Keep it natural and conversational.
             "string"
         ) {
           console.error(
-            "Invalid navigation function call."
+            "❌ Invalid navigation function call:",
+            functionCall
           );
 
           continue;
@@ -1028,7 +1088,7 @@ Keep it natural and conversational.
   }
 
   // ============================================================
-  // PARSE WEBSOCKET
+  // PARSE WEBSOCKET MESSAGE
   // ============================================================
 
   async function parseWebSocketMessage(
@@ -1045,13 +1105,16 @@ Keep it natural and conversational.
       }
 
       if (
-        typeof Blob !== "undefined" &&
+        typeof Blob !==
+          "undefined" &&
         event.data instanceof Blob
       ) {
         const text =
           await event.data.text();
 
-        return JSON.parse(text);
+        return JSON.parse(
+          text
+        );
       }
 
       if (
@@ -1065,20 +1128,9 @@ Keep it natural and conversational.
             )
           );
 
-        return JSON.parse(text);
-      }
-
-      if (
-        event.data &&
-        typeof event.data ===
-          "object"
-      ) {
-        console.warn(
-          "Unsupported WebSocket data:",
-          event.data
+        return JSON.parse(
+          text
         );
-
-        return null;
       }
 
       return null;
@@ -1148,7 +1200,7 @@ Keep it natural and conversational.
       );
 
       // --------------------------------------------------------
-      // TOKEN
+      // EPHEMERAL TOKEN
       // --------------------------------------------------------
 
       const tokenResponse =
@@ -1200,7 +1252,9 @@ Keep it natural and conversational.
       );
 
       const socket =
-        new WebSocket(socketUrl);
+        new WebSocket(
+          socketUrl
+        );
 
       websocketRef.current =
         socket;
@@ -1239,6 +1293,10 @@ Keep it natural and conversational.
                     {},
                 },
 
+                // =================================================
+                // NAVIGATION TOOL
+                // =================================================
+
                 tools: [
                   {
                     functionDeclarations:
@@ -1249,61 +1307,80 @@ Keep it natural and conversational.
 
                           description:
                             `
-You control navigation inside the Netherlands Guide app.
+You control navigation inside the Netherlands Guide application.
+
+The user may speak ANY supported language.
+
+You MUST understand the user's meaning regardless of the language they use.
+
+When the user clearly needs information or help that belongs to one of the pages below, call this function.
 
 IMPORTANT:
-Understand the user's INTENT, not just exact words.
+The URL paths are ALWAYS in English.
+Never translate the URL path.
+Never create a new URL.
+Only use one of the exact enum values.
 
-The user may speak English, Dutch, Urdu, Hindi, Punjabi, Arabic, German, French, Spanish, Turkish, Russian, Ukrainian, Chinese, Farsi, Pashto, or another language.
+Navigation examples:
 
-You MUST understand requests in any language.
+- If the user says they know nothing about housing, needs a home, asks about finding housing, renting, finding an apartment, or asks what to do about housing → "/housing"
 
-When the user asks for information, help, guidance, or says they do not understand what to do about a topic that has a dedicated page, navigate them to the appropriate page.
+- If the user asks about documents, BSN, DigiD, residence documents, letters, paperwork, or official documents → "/documents"
 
-Examples:
+- If the user asks about healthcare, a doctor, huisarts, health insurance, hospital, or medical help → "/healthcare"
 
-- Housing, finding a home, renting, rent, apartment, room, homeless, woning, huisvesting → /housing
-- Documents, paperwork, BSN, DigiD, residence documents, official papers → /documents
-- Healthcare, doctor, huisarts, hospital, health insurance → /healthcare
-- Money, bank, taxes, benefits, financial help → /money
-- Work, job, employment, working in the Netherlands → /work
-- Study, school, education, university, MBO, HBO → /study
-- Transport, OV, train, bus, tram, metro, travelling around Netherlands → /transport
-- Municipality, gemeente, registering at municipality, local government → /municipality
-- Cars, driving, vehicle, driver's license, car registration → /vehicles
-- Waste, garbage, recycling, afval → /waste
-- Dutch phone number, SIM card, mobile number → /dutch-phone-number
-- Planning the day, what to do today → /plan-day
-- Trip planning, planning a trip → /trip-planner
-- Scanning a letter or document → /scanner
-- "What should I do?", "I don't know what to do", or needing guidance about a problem → /what-do-i-do
+- If the user asks about money, banking, benefits, finances, taxes, or financial help → "/money"
 
-IMPORTANT:
-Do not require the user to use the exact English page name.
+- If the user asks about finding a job, working, employment, CV, salary, or work → "/work"
 
-For example:
+- If the user asks about studying, school, university, courses, or education → "/study"
 
+- If the user asks what to do about transport, public transport, OV-chipkaart, trains, buses, trams, metro, cycling, or getting around → "/transport"
+
+- If the user asks about the municipality, gemeente, registering at the municipality, or municipal services → "/municipality"
+
+- If the user asks about cars, driving, vehicle registration, parking, driving licence, or vehicle-related matters → "/vehicles"
+
+- If the user asks about waste, rubbish, recycling, garbage collection, or afval → "/waste"
+
+- If the user wants to explore places, activities, attractions, or things to do → "/explore"
+
+- If the user asks for help planning their day → "/plan-day"
+
+- If the user asks to plan a trip → "/trip-planner"
+
+- If the user wants to scan or understand a letter/document → "/scanner"
+
+- If the user asks "what should I do?", "what do I do now?", or needs general step-by-step help and it is not clearly one of the other categories → "/what-do-i-do"
+
+- If the user wants to return to the home/dashboard → "/dashboard"
+
+- If the user needs a Dutch phone number or help getting one → "/dutch-phone-number"
+
+Only navigate when navigation would genuinely help.
+
+Do NOT navigate just because a keyword happens to appear.
+
+Do NOT navigate for normal conversation.
+
+Do NOT navigate for questions that can be answered directly without opening a page.
+
+If the user says something like:
 "I don't know anything about housing"
-"I need help finding a house"
-"Ik weet niets over wonen"
-"Ich brauche Hilfe mit einer Wohnung"
-"مجھے گھر کے بارے میں مدد چاہیے"
-"मुझे घर के बारे में समझ नहीं आ रहा"
+"Help me find housing"
+"What do I do about transport?"
+"I don't understand how public transport works"
+"Where can I get healthcare?"
+"I need a job"
+"I don't understand my documents"
 
-These all indicate /housing.
+then navigation IS appropriate.
 
-Likewise, if the user says they don't understand transport, asks what they should do about public transport, trains, buses, OV-chipkaart, or similar topics, navigate to /transport.
+The user does not have to explicitly say "open the housing page".
 
-If the user clearly needs one of these dedicated pages, CALL this function immediately.
+Understand intent and navigate automatically.
 
-Do not merely tell the user that you are taking them there.
-Actually call the function.
-
-Only navigate when the request is relevant to one of the listed pages.
-
-For normal conversation or questions that do not belong to a dedicated page, do not navigate.
-
-Always select the exact path from the available enum values.
+The assistant should still answer naturally after navigation when appropriate.
                             `.trim(),
 
                           parameters: {
@@ -1350,7 +1427,7 @@ Always select the exact path from the available enum values.
           );
 
           console.log(
-            "📤 Setup message sent."
+            "📤 Gemini setup sent."
           );
         } catch (error) {
           console.error(
