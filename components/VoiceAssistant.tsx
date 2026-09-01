@@ -16,11 +16,9 @@ type Profile = {
 
 type GeminiMessage = {
   setupComplete?: unknown;
-
   error?: {
     message?: string;
   };
-
   serverContent?: {
     modelTurn?: {
       parts?: Array<{
@@ -30,19 +28,15 @@ type GeminiMessage = {
         };
       }>;
     };
-
     inputTranscription?: {
       text?: string;
     };
-
     outputTranscription?: {
       text?: string;
     };
-
     interrupted?: boolean;
     turnComplete?: boolean;
   };
-
   toolCall?: {
     functionCalls?: Array<{
       id?: string;
@@ -85,36 +79,20 @@ export default function VoiceAssistant() {
   const [error, setError] = useState("");
 
   const websocketRef = useRef<WebSocket | null>(null);
-
-  const microphoneStreamRef =
-    useRef<MediaStream | null>(null);
-
-  const microphoneContextRef =
-    useRef<AudioContext | null>(null);
-
+  const microphoneStreamRef = useRef<MediaStream | null>(null);
+  const microphoneContextRef = useRef<AudioContext | null>(null);
   const microphoneSourceRef =
     useRef<MediaStreamAudioSourceNode | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
 
-  const processorRef =
-    useRef<ScriptProcessorNode | null>(null);
+  const outputContextRef = useRef<AudioContext | null>(null);
+  const nextAudioTimeRef = useRef(0);
+  const audioSourcesRef = useRef<AudioBufferSourceNode[]>([]);
 
-  const outputContextRef =
-    useRef<AudioContext | null>(null);
-
-  const nextAudioTimeRef =
-    useRef(0);
-
-  const audioSourcesRef =
-    useRef<AudioBufferSourceNode[]>([]);
-
-  const isNavigatingRef =
-    useRef(false);
-
-  const microphoneStartedRef =
-    useRef(false);
-
-  const greetingSentRef =
-    useRef(false);
+  const isNavigatingRef = useRef(false);
+  const microphoneStartedRef = useRef(false);
+  const greetingSentRef = useRef(false);
+  const lastNavigationTextRef = useRef("");
 
   // ============================================================
   // LOAD PROFILE
@@ -122,18 +100,13 @@ export default function VoiceAssistant() {
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(
-        "netherlandsGuideProfile"
-      );
+      const saved = localStorage.getItem("netherlandsGuideProfile");
 
       if (saved) {
         setProfile(JSON.parse(saved));
       }
     } catch (error) {
-      console.error(
-        "Could not load profile:",
-        error
-      );
+      console.error("Could not load profile:", error);
     }
   }, []);
 
@@ -152,9 +125,7 @@ export default function VoiceAssistant() {
   // ============================================================
 
   function getProfileLanguage() {
-    const language = String(
-      profile?.language || "English"
-    )
+    const language = String(profile?.language || "English")
       .trim()
       .toLowerCase();
 
@@ -233,7 +204,6 @@ export default function VoiceAssistant() {
     if (
       language.includes("ukrainian") ||
       language.includes("українська") ||
-      language.includes("украинский") ||
       language === "uk"
     ) {
       return "Ukrainian";
@@ -281,56 +251,32 @@ export default function VoiceAssistant() {
   // BASE64
   // ============================================================
 
-  function arrayBufferToBase64(
-    buffer: ArrayBuffer
-  ) {
+  function arrayBufferToBase64(buffer: ArrayBuffer) {
     const bytes = new Uint8Array(buffer);
-
     let binary = "";
-
     const chunkSize = 0x8000;
 
-    for (
-      let i = 0;
-      i < bytes.length;
-      i += chunkSize
-    ) {
+    for (let i = 0; i < bytes.length; i += chunkSize) {
       const chunk = bytes.subarray(
         i,
-        Math.min(
-          i + chunkSize,
-          bytes.length
-        )
+        Math.min(i + chunkSize, bytes.length)
       );
 
-      binary += String.fromCharCode(
-        ...chunk
-      );
+      binary += String.fromCharCode(...chunk);
     }
 
     return btoa(binary);
   }
 
   // ============================================================
-  // FLOAT → PCM16
+  // FLOAT -> PCM16
   // ============================================================
 
-  function floatTo16BitPCM(
-    input: Float32Array
-  ) {
-    const output = new Int16Array(
-      input.length
-    );
+  function floatTo16BitPCM(input: Float32Array) {
+    const output = new Int16Array(input.length);
 
-    for (
-      let i = 0;
-      i < input.length;
-      i++
-    ) {
-      const sample = Math.max(
-        -1,
-        Math.min(1, input[i])
-      );
+    for (let i = 0; i < input.length; i++) {
+      const sample = Math.max(-1, Math.min(1, input[i]));
 
       output[i] =
         sample < 0
@@ -342,7 +288,7 @@ export default function VoiceAssistant() {
   }
 
   // ============================================================
-  // DOWNSAMPLE TO 16KHZ
+  // DOWNSAMPLE -> 16KHZ
   // ============================================================
 
   function downsampleTo16k(
@@ -353,35 +299,25 @@ export default function VoiceAssistant() {
       return input;
     }
 
-    const ratio =
-      inputSampleRate / 16000;
+    const ratio = inputSampleRate / 16000;
+    const newLength = Math.round(input.length / ratio);
 
-    const newLength = Math.round(
-      input.length / ratio
-    );
-
-    const result = new Float32Array(
-      newLength
-    );
+    const result = new Float32Array(newLength);
 
     let offsetResult = 0;
     let offsetBuffer = 0;
 
-    while (
-      offsetResult < result.length
-    ) {
-      const nextOffsetBuffer =
-        Math.round(
-          (offsetResult + 1) * ratio
-        );
+    while (offsetResult < result.length) {
+      const nextOffsetBuffer = Math.round(
+        (offsetResult + 1) * ratio
+      );
 
       let accum = 0;
       let count = 0;
 
       for (
         let i = offsetBuffer;
-        i < nextOffsetBuffer &&
-        i < input.length;
+        i < nextOffsetBuffer && i < input.length;
         i++
       ) {
         accum += input[i];
@@ -389,14 +325,10 @@ export default function VoiceAssistant() {
       }
 
       result[offsetResult] =
-        count > 0
-          ? accum / count
-          : 0;
+        count > 0 ? accum / count : 0;
 
       offsetResult++;
-
-      offsetBuffer =
-        nextOffsetBuffer;
+      offsetBuffer = nextOffsetBuffer;
     }
 
     return result;
@@ -406,16 +338,12 @@ export default function VoiceAssistant() {
   // SEND AUDIO
   // ============================================================
 
-  function sendAudioChunk(
-    pcmBuffer: ArrayBuffer
-  ) {
-    const socket =
-      websocketRef.current;
+  function sendAudioChunk(pcmBuffer: ArrayBuffer) {
+    const socket = websocketRef.current;
 
     if (
       !socket ||
-      socket.readyState !==
-        WebSocket.OPEN
+      socket.readyState !== WebSocket.OPEN
     ) {
       return;
     }
@@ -425,21 +353,14 @@ export default function VoiceAssistant() {
         JSON.stringify({
           realtimeInput: {
             audio: {
-              data:
-                arrayBufferToBase64(
-                  pcmBuffer
-                ),
-              mimeType:
-                "audio/pcm;rate=16000",
+              data: arrayBufferToBase64(pcmBuffer),
+              mimeType: "audio/pcm;rate=16000",
             },
           },
         })
       );
     } catch (error) {
-      console.error(
-        "Could not send audio:",
-        error
-      );
+      console.error("Could not send audio:", error);
     }
   }
 
@@ -448,18 +369,14 @@ export default function VoiceAssistant() {
   // ============================================================
 
   function stopAllAudio() {
-    audioSourcesRef.current.forEach(
-      (source) => {
-        try {
-          source.stop();
-        } catch {}
-      }
-    );
+    audioSourcesRef.current.forEach((source) => {
+      try {
+        source.stop();
+      } catch {}
+    });
 
     audioSourcesRef.current = [];
-
     nextAudioTimeRef.current = 0;
-
     setSpeaking(false);
   }
 
@@ -467,97 +384,57 @@ export default function VoiceAssistant() {
   // PLAY GEMINI AUDIO
   // ============================================================
 
-  async function playAudio(
-    base64Audio: string
-  ) {
+  async function playAudio(base64Audio: string) {
     try {
-      let context =
-        outputContextRef.current;
+      let context = outputContextRef.current;
 
       if (!context) {
         context = new AudioContext({
           sampleRate: 24000,
         });
 
-        outputContextRef.current =
-          context;
+        outputContextRef.current = context;
       }
 
       if (context.state === "suspended") {
         await context.resume();
       }
 
-      const binary =
-        atob(base64Audio);
+      const binary = atob(base64Audio);
+      const bytes = new Uint8Array(binary.length);
 
-      const bytes =
-        new Uint8Array(
-          binary.length
-        );
-
-      for (
-        let i = 0;
-        i < binary.length;
-        i++
-      ) {
-        bytes[i] =
-          binary.charCodeAt(i);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
       }
 
-      const pcm =
-        new Int16Array(
-          bytes.buffer
-        );
+      const pcm = new Int16Array(bytes.buffer);
 
-      const audioBuffer =
-        context.createBuffer(
-          1,
-          pcm.length,
-          24000
-        );
+      const audioBuffer = context.createBuffer(
+        1,
+        pcm.length,
+        24000
+      );
 
-      const channel =
-        audioBuffer.getChannelData(
-          0
-        );
+      const channel = audioBuffer.getChannelData(0);
 
-      for (
-        let i = 0;
-        i < pcm.length;
-        i++
-      ) {
-        channel[i] =
-          pcm[i] / 32768;
+      for (let i = 0; i < pcm.length; i++) {
+        channel[i] = pcm[i] / 32768;
       }
 
-      const source =
-        context.createBufferSource();
+      const source = context.createBufferSource();
 
-      source.buffer =
-        audioBuffer;
+      source.buffer = audioBuffer;
+      source.connect(context.destination);
 
-      source.connect(
-        context.destination
-      );
+      const now = context.currentTime;
 
-      const now =
-        context.currentTime;
-
-      if (
-        nextAudioTimeRef.current <
-        now
-      ) {
-        nextAudioTimeRef.current =
-          now;
+      if (nextAudioTimeRef.current < now) {
+        nextAudioTimeRef.current = now;
       }
 
-      source.start(
-        nextAudioTimeRef.current
-      );
+      source.start(nextAudioTimeRef.current);
 
-      audioSourcesRef.current.push(
-        source
-      );
+      audioSourcesRef.current.push(source);
 
       nextAudioTimeRef.current +=
         audioBuffer.duration;
@@ -567,101 +444,1405 @@ export default function VoiceAssistant() {
       source.onended = () => {
         audioSourcesRef.current =
           audioSourcesRef.current.filter(
-            (item) =>
-              item !== source
+            (item) => item !== source
           );
 
-        if (
-          audioSourcesRef.current
-            .length === 0
-        ) {
+        if (audioSourcesRef.current.length === 0) {
           setSpeaking(false);
         }
       };
     } catch (error) {
-      console.error(
-        "Audio playback error:",
-        error
-      );
+      console.error("Audio playback error:", error);
     }
+  }
+
+  // ============================================================
+  // MULTILINGUAL SMART NAVIGATION
+  // ============================================================
+
+  function detectNavigationPath(text: string): string | null {
+    if (!text) {
+      return null;
+    }
+
+    /*
+     * Normalize Unicode so languages such as Arabic,
+     * Urdu, Hindi, Chinese etc. can be matched reliably.
+     */
+
+    const normalized = text
+      .toLowerCase()
+      .normalize("NFKC")
+      .trim();
+
+    if (!normalized) {
+      return null;
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * HOUSING
+     * ----------------------------------------------------------
+     */
+
+    const housingTerms = [
+      // English
+      "housing",
+      "house",
+      "apartment",
+      "room",
+      "rent",
+      "rental",
+      "accommodation",
+      "place to live",
+
+      // Dutch
+      "woning",
+      "wonen",
+      "huis",
+      "huur",
+      "huren",
+      "kamer",
+      "woonruimte",
+      "huisvesting",
+
+      // German
+      "wohnung",
+      "haus",
+      "zimmer",
+      "miete",
+      "mieten",
+      "unterkunft",
+
+      // French
+      "logement",
+      "maison",
+      "appartement",
+      "chambre",
+      "loyer",
+      "louer",
+
+      // Spanish
+      "vivienda",
+      "casa",
+      "apartamento",
+      "habitación",
+      "alquiler",
+      "alquilar",
+
+      // Turkish
+      "ev",
+      "konut",
+      "daire",
+      "oda",
+      "kira",
+      "kiralık",
+
+      // Arabic
+      "سكن",
+      "منزل",
+      "بيت",
+      "شقة",
+      "غرفة",
+      "إيجار",
+
+      // Urdu
+      "گھر",
+      "مکان",
+      "فلیٹ",
+      "کمرہ",
+      "کرایہ",
+      "رہائش",
+
+      // Hindi
+      "घर",
+      "मकान",
+      "फ्लैट",
+      "कमरा",
+      "किराया",
+      "आवास",
+
+      // Punjabi
+      "ਘਰ",
+      "ਮਕਾਨ",
+      "ਕਮਰਾ",
+      "ਕਿਰਾਇਆ",
+      "ਰਿਹਾਇਸ਼",
+
+      // Persian
+      "خانه",
+      "آپارتمان",
+      "اتاق",
+      "اجاره",
+      "مسکن",
+
+      // Russian
+      "жилье",
+      "дом",
+      "квартира",
+      "комната",
+      "аренда",
+
+      // Ukrainian
+      "житло",
+      "будинок",
+      "квартира",
+      "кімната",
+      "оренда",
+    ];
+
+    if (
+      housingTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/housing";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * TRANSPORT
+     * ----------------------------------------------------------
+     */
+
+    const transportTerms = [
+      // English
+      "transport",
+      "public transport",
+      "bus",
+      "train",
+      "tram",
+      "metro",
+      "subway",
+      "ovpay",
+      "ov-chipkaart",
+      "ov chipkaart",
+      "ns",
+
+      // Dutch
+      "openbaar vervoer",
+      "trein",
+      "bus",
+      "tram",
+      "metro",
+      "ovpay",
+      "ov-chipkaart",
+
+      // German
+      "verkehr",
+      "öffentliche verkehrsmittel",
+      "zug",
+      "bahn",
+      "bus",
+      "straßenbahn",
+      "u-bahn",
+
+      // French
+      "transport",
+      "transports publics",
+      "train",
+      "métro",
+      "tramway",
+      "bus",
+
+      // Spanish
+      "transporte",
+      "transporte público",
+      "tren",
+      "metro",
+      "autobús",
+
+      // Turkish
+      "ulaşım",
+      "toplu taşıma",
+      "tren",
+      "otobüs",
+      "metro",
+      "tramvay",
+
+      // Arabic
+      "المواصلات",
+      "النقل",
+      "النقل العام",
+      "قطار",
+      "حافلة",
+      "ترام",
+      "مترو",
+
+      // Urdu
+      "ٹرانسپورٹ",
+      "نقل و حمل",
+      "پبلک ٹرانسپورٹ",
+      "ٹرین",
+      "بس",
+      "میٹرو",
+
+      // Hindi
+      "परिवहन",
+      "सार्वजनिक परिवहन",
+      "ट्रेन",
+      "बस",
+      "मेट्रो",
+
+      // Punjabi
+      "ਆਵਾਜਾਈ",
+      "ਜਨਤਕ ਆਵਾਜਾਈ",
+      "ਰੇਲ",
+      "ਬੱਸ",
+      "ਮੈਟਰੋ",
+
+      // Persian
+      "حمل و نقل",
+      "حمل‌ونقل",
+      "حمل و نقل عمومی",
+      "قطار",
+      "اتوبوس",
+      "مترو",
+
+      // Russian
+      "транспорт",
+      "общественный транспорт",
+      "поезд",
+      "автобус",
+      "метро",
+      "трамвай",
+
+      // Ukrainian
+      "транспорт",
+      "громадський транспорт",
+      "поїзд",
+      "автобус",
+      "метро",
+      "трамвай",
+    ];
+
+    if (
+      transportTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/transport";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * PHONE / SIM
+     * ----------------------------------------------------------
+     */
+
+    const phoneTerms = [
+      "phone number",
+      "dutch number",
+      "sim card",
+      "simkaart",
+      "sim",
+      "mobile number",
+      "telefoonnummer",
+      "mobiel nummer",
+
+      "telefonnummer",
+      "sim-karte",
+
+      "numéro de téléphone",
+      "carte sim",
+
+      "número de teléfono",
+      "tarjeta sim",
+
+      "telefon numarası",
+      "sim kart",
+
+      "رقم الهاتف",
+      "شريحة",
+      "شريحة اتصال",
+
+      "فون نمبر",
+      "موبائل نمبر",
+      "سم کارڈ",
+
+      "फोन नंबर",
+      "मोबाइल नंबर",
+      "सिम कार्ड",
+
+      "ਫੋਨ ਨੰਬਰ",
+      "ਮੋਬਾਈਲ ਨੰਬਰ",
+      "ਸਿਮ ਕਾਰਡ",
+
+      "شماره تلفن",
+      "سیم کارت",
+
+      "номер телефона",
+      "сим-карта",
+
+      "номер телефону",
+    ];
+
+    if (
+      phoneTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/dutch-phone-number";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * DOCUMENTS / BSN / DIGID
+     * ----------------------------------------------------------
+     */
+
+    const documentTerms = [
+      "document",
+      "documents",
+      "bsn",
+      "digid",
+      "digi d",
+      "residence permit",
+      "residence card",
+      "passport",
+      "letter",
+
+      "documenten",
+      "brief",
+      "verblijfsvergunning",
+      "paspoort",
+
+      "dokument",
+      "aufenthaltstitel",
+      "reisepass",
+
+      "document",
+      "passeport",
+      "titre de séjour",
+
+      "documentos",
+      "pasaporte",
+      "permiso de residencia",
+
+      "belge",
+      "ikamet",
+      "pasaport",
+
+      "وثيقة",
+      "وثائق",
+      "جواز سفر",
+      "إقامة",
+
+      "دستاویز",
+      "دستاویزات",
+      "پاسپورٹ",
+      "رہائشی اجازت",
+
+      "दस्तावेज़",
+      "दस्तावेज",
+      "पासपोर्ट",
+      "निवास परमिट",
+
+      "ਦਸਤਾਵੇਜ਼",
+      "ਪਾਸਪੋਰਟ",
+
+      "مدرک",
+      "مدارک",
+      "گذرنامه",
+      "اقامت",
+
+      "документ",
+      "документы",
+      "паспорт",
+      "вид на жительство",
+
+      "документ",
+      "документи",
+      "паспорт",
+    ];
+
+    if (
+      documentTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/documents";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * HEALTHCARE
+     * ----------------------------------------------------------
+     */
+
+    const healthcareTerms = [
+      "healthcare",
+      "health care",
+      "doctor",
+      "hospital",
+      "health insurance",
+      "medicine",
+      "medication",
+      "pharmacy",
+
+      "huisarts",
+      "dokter",
+      "ziekenhuis",
+      "zorgverzekering",
+      "apotheek",
+      "medicijn",
+
+      "arzt",
+      "krankenhaus",
+      "krankenversicherung",
+      "apotheke",
+
+      "médecin",
+      "hôpital",
+      "assurance maladie",
+      "pharmacie",
+
+      "médico",
+      "hospital",
+      "seguro médico",
+      "farmacia",
+
+      "doktor",
+      "hastane",
+      "sağlık sigortası",
+      "eczane",
+
+      "طبيب",
+      "مستشفى",
+      "تأمين صحي",
+      "صيدلية",
+      "دواء",
+
+      "ڈاکٹر",
+      "ہسپتال",
+      "صحت",
+      "ہیلتھ انشورنس",
+      "فارمیسی",
+      "دوا",
+
+      "डॉक्टर",
+      "अस्पताल",
+      "स्वास्थ्य बीमा",
+      "दवा",
+      "फार्मेसी",
+
+      "ਡਾਕਟਰ",
+      "ਹਸਪਤਾਲ",
+      "ਸਿਹਤ",
+      "ਦਵਾਈ",
+
+      "پزشک",
+      "بیمارستان",
+      "بیمه",
+      "داروخانه",
+      "دارو",
+
+      "врач",
+      "больница",
+      "медицинская страховка",
+      "аптека",
+      "лекарство",
+
+      "лікар",
+      "лікарня",
+      "медична страховка",
+      "аптека",
+    ];
+
+    if (
+      healthcareTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/healthcare";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * MONEY / TAX / BENEFITS
+     * ----------------------------------------------------------
+     */
+
+    const moneyTerms = [
+      "money",
+      "bank",
+      "banking",
+      "tax",
+      "taxes",
+      "benefit",
+      "benefits",
+      "allowance",
+      "toeslag",
+      "belasting",
+      "geld",
+      "bankrekening",
+
+      "geld",
+      "belasting",
+      "toeslagen",
+
+      "geld",
+      "steuer",
+      "steuern",
+      "bank",
+      "geldleistung",
+
+      "argent",
+      "banque",
+      "impôt",
+      "allocations",
+
+      "dinero",
+      "banco",
+      "impuestos",
+      "beneficios",
+
+      "para",
+      "banka",
+      "vergi",
+
+      "مال",
+      "بینک",
+      "ٹیکس",
+      "ٹیکسز",
+      "فائدہ",
+      "الاؤنس",
+
+      "पैसा",
+      "बैंक",
+      "टैक्स",
+      "लाभ",
+      "भत्ता",
+
+      "ਪੈਸਾ",
+      "ਬੈਂਕ",
+      "ਟੈਕਸ",
+      "ਲਾਭ",
+
+      "پول",
+      "بانک",
+      "مالیات",
+      "مالیات",
+
+      "деньги",
+      "банк",
+      "налог",
+      "пособие",
+
+      "гроші",
+      "банк",
+      "податок",
+      "допомога",
+
+      "مال",
+      "بنك",
+      "ضريبة",
+      "إعانة",
+    ];
+
+    if (
+      moneyTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/money";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * WORK
+     * ----------------------------------------------------------
+     */
+
+    const workTerms = [
+      "work",
+      "job",
+      "employment",
+      "salary",
+      "career",
+
+      "werk",
+      "baan",
+      "werken",
+      "salaris",
+      "vacature",
+
+      "arbeit",
+      "job",
+      "beruf",
+      "gehalt",
+
+      "travail",
+      "emploi",
+      "salaire",
+      "métier",
+
+      "trabajo",
+      "empleo",
+      "salario",
+
+      "iş",
+      "işe",
+      "çalışmak",
+      "maaş",
+
+      "عمل",
+      "وظيفة",
+      "راتب",
+      "توظيف",
+
+      "کام",
+      "نوکری",
+      "ملازمت",
+      "تنخواہ",
+
+      "काम",
+      "नौकरी",
+      "रोजगार",
+      "वेतन",
+
+      "ਕੰਮ",
+      "ਨੌਕਰੀ",
+      "ਤਨਖਾਹ",
+
+      "کار",
+      "شغل",
+      "حقوق",
+
+      "работа",
+      "работать",
+      "вакансия",
+      "зарплата",
+
+      "робота",
+      "працювати",
+      "вакансія",
+      "зарплата",
+    ];
+
+    if (
+      workTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/work";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * STUDY
+     * ----------------------------------------------------------
+     */
+
+    const studyTerms = [
+      "study",
+      "studying",
+      "school",
+      "university",
+      "college",
+      "education",
+      "student",
+
+      "studie",
+      "opleiding",
+      "universiteit",
+      "school",
+
+      "studium",
+      "schule",
+      "universität",
+      "ausbildung",
+
+      "études",
+      "étudier",
+      "école",
+      "université",
+      "éducation",
+
+      "estudio",
+      "estudiar",
+      "escuela",
+      "universidad",
+      "educación",
+
+      "öğrenim",
+      "okul",
+      "üniversite",
+      "eğitim",
+      "öğrenci",
+
+      "دراسة",
+      "مدرسة",
+      "جامعة",
+      "تعليم",
+      "طالب",
+
+      "پڑھائی",
+      "تعلیم",
+      "اسکول",
+      "یونیورسٹی",
+      "طالب علم",
+
+      "पढ़ाई",
+      "स्कूल",
+      "विश्वविद्यालय",
+      "शिक्षा",
+      "छात्र",
+
+      "ਪੜ੍ਹਾਈ",
+      "ਸਕੂਲ",
+      "ਯੂਨੀਵਰਸਿਟੀ",
+      "ਸਿੱਖਿਆ",
+      "ਵਿਦਿਆਰਥੀ",
+
+      "تحصیل",
+      "دانشگاه",
+      "مدرسه",
+      "آموزش",
+
+      "учеба",
+      "учиться",
+      "школа",
+      "университет",
+      "образование",
+      "студент",
+
+      "навчання",
+      "вчитися",
+      "школа",
+      "університет",
+      "освіта",
+      "студент",
+    ];
+
+    if (
+      studyTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/study";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * MUNICIPALITY
+     * ----------------------------------------------------------
+     */
+
+    const municipalityTerms = [
+      "municipality",
+      "registration",
+      "register",
+      "registering",
+      "town hall",
+      "city hall",
+
+      "gemeente",
+      "registratie",
+      "inschrijven",
+      "gemeentehuis",
+
+      "gemeinde",
+      "anmeldung",
+      "rathaus",
+
+      "mairie",
+      "commune",
+      "inscription",
+
+      "ayuntamiento",
+      "municipio",
+      "registro",
+
+      "belediye",
+      "kayıt",
+
+      "بلدية",
+      "تسجيل",
+      "البلدية",
+
+      "میونسپلٹی",
+      "رجسٹریشن",
+      "بلدیہ",
+
+      "नगरपालिका",
+      "पंजीकरण",
+
+      "ਨਗਰਪਾਲਿਕਾ",
+      "ਰਜਿਸਟ੍ਰੇਸ਼ਨ",
+
+      "شهرداری",
+      "ثبت",
+
+      "муниципалитет",
+      "регистрация",
+      "мэрия",
+
+      "муніципалітет",
+      "реєстрація",
+      "мерія",
+    ];
+
+    if (
+      municipalityTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/municipality";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * VEHICLES / DRIVING / PARKING
+     * ----------------------------------------------------------
+     */
+
+    const vehicleTerms = [
+      "car",
+      "driving",
+      "driving licence",
+      "driving license",
+      "parking",
+      "vehicle",
+
+      "auto",
+      "rijbewijs",
+      "parkeren",
+      "auto parkeren",
+
+      "auto",
+      "führerschein",
+      "parken",
+      "fahrzeug",
+
+      "voiture",
+      "permis de conduire",
+      "stationnement",
+      "véhicule",
+
+      "coche",
+      "carnet de conducir",
+      "aparcar",
+      "estacionamiento",
+
+      "araba",
+      "ehliyet",
+      "park",
+      "park etmek",
+
+      "سيارة",
+      "قيادة",
+      "رخصة القيادة",
+      "موقف سيارات",
+
+      "گاڑی",
+      "ڈرائیونگ",
+      "ڈرائیونگ لائسنس",
+      "پارکنگ",
+
+      "कार",
+      "ड्राइविंग",
+      "ड्राइविंग लाइसेंस",
+      "पार्किंग",
+
+      "ਗੱਡੀ",
+      "ਡਰਾਈਵਿੰਗ",
+      "ਲਾਇਸੈਂਸ",
+      "ਪਾਰਕਿੰਗ",
+
+      "ماشین",
+      "رانندگی",
+      "گواهینامه",
+      "پارکینگ",
+
+      "машина",
+      "вождение",
+      "водительские права",
+      "парковка",
+
+      "автомобіль",
+      "водіння",
+      "водійські права",
+      "паркування",
+    ];
+
+    if (
+      vehicleTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/vehicles";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * WASTE
+     * ----------------------------------------------------------
+     */
+
+    const wasteTerms = [
+      "waste",
+      "trash",
+      "garbage",
+      "recycling",
+      "recycle",
+
+      "afval",
+      "vuilnis",
+      "recyclen",
+
+      "müll",
+      "abfall",
+      "recycling",
+
+      "déchets",
+      "ordures",
+      "recyclage",
+
+      "residuos",
+      "basura",
+      "reciclaje",
+
+      "atık",
+      "çöp",
+      "geri dönüşüm",
+
+      "نفايات",
+      "قمامة",
+      "إعادة التدوير",
+
+      "کچرا",
+      "فضلہ",
+      "ری سائیکلنگ",
+
+      "कचरा",
+      "अपशिष्ट",
+      "रीसाइक्लिंग",
+
+      "ਕੂੜਾ",
+      "ਰੱਦੀ",
+      "ਰੀਸਾਈਕਲਿੰਗ",
+
+      "زباله",
+      "پسماند",
+      "بازیافت",
+
+      "мусор",
+      "отходы",
+      "переработка",
+
+      "сміття",
+      "відходи",
+      "переробка",
+    ];
+
+    if (
+      wasteTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/waste";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * EXPLORE
+     * ----------------------------------------------------------
+     */
+
+    const exploreTerms = [
+      "things to do",
+      "activities",
+      "places to visit",
+      "what can i do",
+      "explore",
+      "attractions",
+
+      "activiteiten",
+      "uitjes",
+      "bezienswaardigheden",
+
+      "aktivitäten",
+      "sehenswürdigkeiten",
+
+      "activités",
+      "choses à faire",
+      "visiter",
+
+      "actividades",
+      "cosas que hacer",
+      "lugares para visitar",
+
+      "activiteiten",
+      "gezellig",
+
+      "أنشطة",
+      "أماكن للزيارة",
+      "ماذا أفعل",
+
+      "سرگرمیاں",
+      "دیکھنے کی جگہیں",
+      "کیا کر سکتا ہوں",
+
+      "गतिविधियाँ",
+      "घूमने की जगहें",
+      "क्या कर सकता हूँ",
+
+      "سرگرمیاں",
+      "جگہیں",
+
+      "развлечения",
+      "достопримечательности",
+      "куда сходить",
+
+      "розваги",
+      "пам'ятки",
+      "куди піти",
+    ];
+
+    if (
+      exploreTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/explore";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * PLAN DAY
+     * ----------------------------------------------------------
+     */
+
+    const planDayTerms = [
+      "plan my day",
+      "plan today",
+      "what should i do today",
+      "today",
+
+      "vandaag",
+      "dag plannen",
+
+      "heute",
+      "meinen tag planen",
+
+      "aujourd'hui",
+      "planifier ma journée",
+
+      "hoy",
+      "planificar mi día",
+
+      "bugün",
+      "günümü planla",
+
+      "اليوم",
+      "خطط ليومي",
+
+      "آج",
+      "میرا دن پلان کرو",
+
+      "आज",
+      "मेरा दिन प्लान करो",
+
+      "ਅੱਜ",
+      "ਮੇਰਾ ਦਿਨ ਪਲਾਨ ਕਰੋ",
+
+      "امروز",
+      "برنامه روز",
+
+      "сегодня",
+      "спланировать день",
+
+      "сьогодні",
+      "спланувати день",
+    ];
+
+    if (
+      planDayTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/plan-day";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * TRIP PLANNER
+     * ----------------------------------------------------------
+     */
+
+    const tripTerms = [
+      "trip",
+      "travel",
+      "trip planner",
+      "holiday",
+      "vacation",
+
+      "reis",
+      "vakantie",
+
+      "reise",
+      "urlaub",
+
+      "voyage",
+      "vacances",
+
+      "viaje",
+      "vacaciones",
+
+      "seyahat",
+      "tatil",
+
+      "سفر",
+      "رحلة",
+      "عطلة",
+
+      "سفر",
+      "چھٹی",
+      "سیر",
+
+      "यात्रा",
+      "छुट्टी",
+      "सफर",
+
+      "ਯਾਤਰਾ",
+      "ਛੁੱਟੀ",
+
+      "سفر",
+      "تعطیلات",
+
+      "поездка",
+      "путешествие",
+      "отпуск",
+
+      "подорож",
+      "відпустка",
+    ];
+
+    if (
+      tripTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/trip-planner";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * SCANNER
+     * ----------------------------------------------------------
+     */
+
+    const scannerTerms = [
+      "scan this",
+      "scan a letter",
+      "scan document",
+      "what does this letter say",
+      "what does this mean",
+
+      "scan dit",
+      "brief scannen",
+      "document scannen",
+
+      "scannen",
+      "dokument scannen",
+
+      "scanner",
+      "numériser",
+      "scanner ce document",
+
+      "escanear",
+      "escanear documento",
+
+      "belgeyi tara",
+
+      "امسح",
+      "مسح المستند",
+      "ماذا تعني هذه الرسالة",
+
+      "اسکین",
+      "خط اسکین کرو",
+      "اس دستاویز کو اسکین کرو",
+
+      "स्कैन",
+      "दस्तावेज़ स्कैन करो",
+
+      "ਸਕੈਨ",
+      "ਦਸਤਾਵੇਜ਼ ਸਕੈਨ ਕਰੋ",
+
+      "اسکن",
+      "مدرک را اسکن کن",
+
+      "сканировать",
+      "отсканировать документ",
+
+      "сканувати",
+      "відсканувати документ",
+    ];
+
+    if (
+      scannerTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/scanner";
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * WHAT DO I DO
+     * ----------------------------------------------------------
+     */
+
+    const helpTerms = [
+      "what should i do",
+      "what do i do",
+      "what can i do",
+      "i don't know what to do",
+      "i don't understand",
+      "help me",
+
+      "wat moet ik doen",
+      "wat kan ik doen",
+      "ik begrijp het niet",
+      "help me",
+
+      "was soll ich tun",
+      "ich verstehe nicht",
+      "hilf mir",
+
+      "que debo hacer",
+      "no entiendo",
+      "ayúdame",
+
+      "que dois-je faire",
+      "je ne comprends pas",
+      "aidez-moi",
+
+      "ne yapmalıyım",
+      "anlamıyorum",
+      "yardım et",
+
+      "ماذا يجب أن أفعل",
+      "لا أفهم",
+      "ساعدني",
+
+      "مجھے کیا کرنا چاہیے",
+      "مجھے سمجھ نہیں آ رہی",
+      "میری مدد کریں",
+
+      "मुझे क्या करना चाहिए",
+      "मुझे समझ नहीं आ रहा",
+      "मेरी मदद करो",
+
+      "ਮੈਨੂੰ ਕੀ ਕਰਨਾ ਚਾਹੀਦਾ ਹੈ",
+      "ਮੈਨੂੰ ਸਮਝ ਨਹੀਂ ਆ ਰਹੀ",
+      "ਮੇਰੀ ਮਦਦ ਕਰੋ",
+
+      "چه کار کنم",
+      "متوجه نمی شوم",
+      "کمکم کن",
+
+      "что мне делать",
+      "я не понимаю",
+      "помоги мне",
+
+      "що мені робити",
+      "я не розумію",
+      "допоможи мені",
+    ];
+
+    if (
+      helpTerms.some((term) =>
+        normalized.includes(term)
+      )
+    ) {
+      return "/what-do-i-do";
+    }
+
+    return null;
   }
 
   // ============================================================
   // NAVIGATION
   // ============================================================
 
-  function navigateToPage(
-    path: string
-  ) {
-    if (
-      typeof path !== "string"
-    ) {
-      console.error(
-        "Navigation path is not a string:",
-        path
-      );
-
+  function navigateToPage(path: string) {
+    if (!ALLOWED_PATHS.has(path)) {
+      console.error("Blocked navigation:", path);
       return false;
     }
 
-    const cleanPath =
-      path.trim();
-
-    if (
-      !ALLOWED_PATHS.has(cleanPath)
-    ) {
-      console.error(
-        "Blocked navigation:",
-        cleanPath
-      );
-
+    if (isNavigatingRef.current) {
       return false;
     }
 
-    if (
-      isNavigatingRef.current
-    ) {
-      console.log(
-        "Navigation already in progress."
-      );
+    isNavigatingRef.current = true;
 
-      return false;
-    }
+    console.log("🧭 ACTUALLY NAVIGATING:", path);
 
-    isNavigatingRef.current =
-      true;
-
-    console.log(
-      "🧭 NAVIGATING:",
-      cleanPath
-    );
-
-    // Stop current Gemini audio.
     stopAllAudio();
 
     try {
-      router.push(cleanPath);
-
-      // Also refresh the route state after navigation.
-      router.refresh();
-
-      window.setTimeout(() => {
-        isNavigatingRef.current =
-          false;
-      }, 2000);
-
-      return true;
+      router.push(path);
     } catch (error) {
       console.error(
-        "Navigation failed:",
+        "Router navigation failed:",
         error
       );
 
-      isNavigatingRef.current =
-        false;
-
+      isNavigatingRef.current = false;
       return false;
     }
+
+    window.setTimeout(() => {
+      isNavigatingRef.current = false;
+    }, 1500);
+
+    return true;
+  }
+
+  // ============================================================
+  // USER TRANSCRIPTION
+  // ============================================================
+
+  function handleUserTranscription(text: string) {
+    if (!text) {
+      return;
+    }
+
+    console.log("👤 USER:", text);
+
+    const normalized = text
+      .toLowerCase()
+      .normalize("NFKC")
+      .trim();
+
+    if (
+      normalized ===
+      lastNavigationTextRef.current
+    ) {
+      return;
+    }
+
+    lastNavigationTextRef.current = normalized;
+
+    const path = detectNavigationPath(normalized);
+
+    if (!path) {
+      return;
+    }
+
+    console.log(
+      "🧭 LOCAL MULTILINGUAL NAVIGATION DETECTED:",
+      {
+        text,
+        path,
+        language: getProfileLanguage(),
+      }
+    );
+
+    navigateToPage(path);
   }
 
   // ============================================================
@@ -674,18 +1855,12 @@ export default function VoiceAssistant() {
     path: string,
     success: boolean
   ) {
-    const socket =
-      websocketRef.current;
+    const socket = websocketRef.current;
 
     if (
       !socket ||
-      socket.readyState !==
-        WebSocket.OPEN
+      socket.readyState !== WebSocket.OPEN
     ) {
-      console.error(
-        "Cannot send tool response because WebSocket is closed."
-      );
-
       return;
     }
 
@@ -708,7 +1883,7 @@ export default function VoiceAssistant() {
       );
 
       console.log(
-        "📤 Navigation tool response:",
+        "📤 Tool response sent:",
         {
           id,
           path,
@@ -730,31 +1905,23 @@ export default function VoiceAssistant() {
   async function startMicrophoneProcessing(
     stream: MediaStream
   ) {
-    if (
-      microphoneStartedRef.current
-    ) {
+    if (microphoneStartedRef.current) {
       return;
     }
 
-    microphoneStartedRef.current =
-      true;
+    microphoneStartedRef.current = true;
 
     try {
-      const context =
-        new AudioContext();
+      const context = new AudioContext();
 
-      microphoneContextRef.current =
-        context;
+      microphoneContextRef.current = context;
 
       await context.resume();
 
       const source =
-        context.createMediaStreamSource(
-          stream
-        );
+        context.createMediaStreamSource(stream);
 
-      microphoneSourceRef.current =
-        source;
+      microphoneSourceRef.current = source;
 
       const processor =
         context.createScriptProcessor(
@@ -763,46 +1930,34 @@ export default function VoiceAssistant() {
           1
         );
 
-      processorRef.current =
-        processor;
+      processorRef.current = processor;
 
-      processor.onaudioprocess =
-        (event) => {
-          const input =
-            event.inputBuffer.getChannelData(
-              0
-            );
+      processor.onaudioprocess = (event) => {
+        const input =
+          event.inputBuffer.getChannelData(0);
 
-          const downsampled =
-            downsampleTo16k(
-              input,
-              context.sampleRate
-            );
+        const downsampled =
+          downsampleTo16k(
+            input,
+            context.sampleRate
+          );
 
-          const pcm =
-            floatTo16BitPCM(
-              downsampled
-            );
+        const pcm =
+          floatTo16BitPCM(downsampled);
 
-          sendAudioChunk(pcm);
+        sendAudioChunk(pcm);
 
-          setListening(true);
-        };
+        setListening(true);
+      };
 
-      source.connect(
-        processor
-      );
-
-      processor.connect(
-        context.destination
-      );
+      source.connect(processor);
+      processor.connect(context.destination);
 
       console.log(
         "🎤 Microphone streaming started."
       );
     } catch (error) {
-      microphoneStartedRef.current =
-        false;
+      microphoneStartedRef.current = false;
 
       console.error(
         "Microphone processing error:",
@@ -820,10 +1975,7 @@ export default function VoiceAssistant() {
   async function handleGeminiMessage(
     data: GeminiMessage
   ) {
-    console.log(
-      "📩 Gemini:",
-      data
-    );
+    console.log("📩 Gemini:", data);
 
     // ----------------------------------------------------------
     // ERROR
@@ -875,23 +2027,17 @@ export default function VoiceAssistant() {
         }
       }
 
-      // --------------------------------------------------------
-      // ONE GREETING
-      // --------------------------------------------------------
+      // ONE GREETING ONLY
 
-      if (
-        !greetingSentRef.current
-      ) {
-        greetingSentRef.current =
-          true;
+      if (!greetingSentRef.current) {
+        greetingSentRef.current = true;
 
         const socket =
           websocketRef.current;
 
         if (
           socket &&
-          socket.readyState ===
-            WebSocket.OPEN
+          socket.readyState === WebSocket.OPEN
         ) {
           socket.send(
             JSON.stringify({
@@ -904,7 +2050,7 @@ export default function VoiceAssistant() {
                         text: `
 Give one very short, warm welcome.
 
-Speak only in ${getProfileLanguage()}.
+Speak ONLY in ${getProfileLanguage()}.
 
 This is the first greeting of the session.
 
@@ -912,9 +2058,11 @@ Do not explain anything.
 
 Do not mention AI, technology, APIs, code or systems.
 
-Use the requested language from your first word.
+Use the requested language from your very first word.
 
 Keep it natural and conversational.
+
+Do not switch to English unless the user specifically asks for English.
                         `.trim(),
                       },
                     ],
@@ -926,7 +2074,7 @@ Keep it natural and conversational.
           );
 
           console.log(
-            "👋 Greeting requested."
+            "👋 One-time multilingual greeting requested."
           );
         }
       }
@@ -957,9 +2105,7 @@ Keep it natural and conversational.
         ?.modelTurn
         ?.parts || [];
 
-    for (
-      const part of audioParts
-    ) {
+    for (const part of audioParts) {
       const inlineData =
         part?.inlineData;
 
@@ -985,10 +2131,7 @@ Keep it natural and conversational.
         ?.text;
 
     if (inputText) {
-      console.log(
-        "👤 USER:",
-        inputText
-      );
+      handleUserTranscription(inputText);
     }
 
     // ----------------------------------------------------------
@@ -1007,26 +2150,22 @@ Keep it natural and conversational.
       );
     }
 
-    // ==========================================================
-    // NAVIGATION FUNCTION CALL
-    // ==========================================================
+    // ----------------------------------------------------------
+    // FUNCTION CALL
+    // ----------------------------------------------------------
 
     const functionCalls =
       data.toolCall
         ?.functionCalls;
 
-    if (
-      functionCalls &&
-      functionCalls.length > 0
-    ) {
+    if (functionCalls) {
       console.log(
         "🧭 FUNCTION CALLS RECEIVED:",
         functionCalls
       );
 
       for (
-        const functionCall of
-          functionCalls
+        const functionCall of functionCalls
       ) {
         if (
           functionCall.name !==
@@ -1043,7 +2182,7 @@ Keep it natural and conversational.
           functionCall.id;
 
         console.log(
-          "🧭 NAVIGATION REQUEST FROM GEMINI:",
+          "🧭 GEMINI NAVIGATION REQUEST:",
           {
             path,
             id,
@@ -1052,12 +2191,10 @@ Keep it natural and conversational.
 
         if (
           !id ||
-          typeof path !==
-            "string"
+          typeof path !== "string"
         ) {
           console.error(
-            "❌ Invalid navigation function call:",
-            functionCall
+            "Invalid navigation function call."
           );
 
           continue;
@@ -1088,7 +2225,7 @@ Keep it natural and conversational.
   }
 
   // ============================================================
-  // PARSE WEBSOCKET MESSAGE
+  // PARSE WEBSOCKET
   // ============================================================
 
   async function parseWebSocketMessage(
@@ -1107,14 +2244,13 @@ Keep it natural and conversational.
       if (
         typeof Blob !==
           "undefined" &&
-        event.data instanceof Blob
+        event.data instanceof
+          Blob
       ) {
         const text =
           await event.data.text();
 
-        return JSON.parse(
-          text
-        );
+        return JSON.parse(text);
       }
 
       if (
@@ -1128,9 +2264,20 @@ Keep it natural and conversational.
             )
           );
 
-        return JSON.parse(
-          text
+        return JSON.parse(text);
+      }
+
+      if (
+        event.data &&
+        typeof event.data ===
+          "object"
+      ) {
+        console.warn(
+          "Unsupported WebSocket data:",
+          event.data
         );
+
+        return null;
       }
 
       return null;
@@ -1159,11 +2306,9 @@ Keep it natural and conversational.
     setError("");
     setConnecting(true);
 
-    microphoneStartedRef.current =
-      false;
-
-    greetingSentRef.current =
-      false;
+    microphoneStartedRef.current = false;
+    greetingSentRef.current = false;
+    lastNavigationTextRef.current = "";
 
     try {
       // --------------------------------------------------------
@@ -1200,7 +2345,7 @@ Keep it natural and conversational.
       );
 
       // --------------------------------------------------------
-      // EPHEMERAL TOKEN
+      // TOKEN
       // --------------------------------------------------------
 
       const tokenResponse =
@@ -1293,133 +2438,139 @@ Keep it natural and conversational.
                     {},
                 },
 
-                // =================================================
-                // NAVIGATION TOOL
-                // =================================================
-
                 tools: [
                   {
-                    functionDeclarations:
-                      [
-                        {
-                          name:
-                            "navigate_to_page",
+                    functionDeclarations: [
+                      {
+                        name:
+                          "navigate_to_page",
 
-                          description:
-                            `
-You control navigation inside the Netherlands Guide application.
-
-The user may speak ANY supported language.
-
-You MUST understand the user's meaning regardless of the language they use.
-
-When the user clearly needs information or help that belongs to one of the pages below, call this function.
+                        description: `
+Navigate the user to the correct Netherlands Guide page when they clearly need information from one of the available sections.
 
 IMPORTANT:
-The URL paths are ALWAYS in English.
-Never translate the URL path.
-Never create a new URL.
-Only use one of the exact enum values.
+The user can speak ANY language.
 
-Navigation examples:
+Understand the user's intent regardless of the language they use.
 
-- If the user says they know nothing about housing, needs a home, asks about finding housing, renting, finding an apartment, or asks what to do about housing → "/housing"
+Do NOT require English keywords.
 
-- If the user asks about documents, BSN, DigiD, residence documents, letters, paperwork, or official documents → "/documents"
+The user may speak Dutch, English, Urdu, Hindi, Punjabi, Arabic, German, French, Spanish, Turkish, Russian, Ukrainian, Chinese, Persian, Pashto, or another language.
 
-- If the user asks about healthcare, a doctor, huisarts, health insurance, hospital, or medical help → "/healthcare"
+Always map the user's intent to one of the canonical English URL paths below.
 
-- If the user asks about money, banking, benefits, finances, taxes, or financial help → "/money"
+AVAILABLE PAGES:
 
-- If the user asks about finding a job, working, employment, CV, salary, or work → "/work"
+Housing:
+ /housing
 
-- If the user asks about studying, school, university, courses, or education → "/study"
+Transport and public transport:
+ /transport
 
-- If the user asks what to do about transport, public transport, OV-chipkaart, trains, buses, trams, metro, cycling, or getting around → "/transport"
+Dutch phone number or SIM:
+ /dutch-phone-number
 
-- If the user asks about the municipality, gemeente, registering at the municipality, or municipal services → "/municipality"
+Documents, BSN, DigiD, passport or residence documents:
+ /documents
 
-- If the user asks about cars, driving, vehicle registration, parking, driving licence, or vehicle-related matters → "/vehicles"
+Healthcare, doctor, hospital, health insurance, medicine:
+ /healthcare
 
-- If the user asks about waste, rubbish, recycling, garbage collection, or afval → "/waste"
+Money, bank, taxes, benefits or allowances:
+ /money
 
-- If the user wants to explore places, activities, attractions, or things to do → "/explore"
+Work, jobs, employment or salary:
+ /work
 
-- If the user asks for help planning their day → "/plan-day"
+Study, school, university or education:
+ /study
 
-- If the user asks to plan a trip → "/trip-planner"
+Municipality, registration, gemeente or town hall:
+ /municipality
 
-- If the user wants to scan or understand a letter/document → "/scanner"
+Car, driving, driving licence or parking:
+ /vehicles
 
-- If the user asks "what should I do?", "what do I do now?", or needs general step-by-step help and it is not clearly one of the other categories → "/what-do-i-do"
+Waste, garbage, recycling or rubbish:
+ /waste
 
-- If the user wants to return to the home/dashboard → "/dashboard"
+Things to do, activities or places to visit:
+ /explore
 
-- If the user needs a Dutch phone number or help getting one → "/dutch-phone-number"
+Planning what to do today:
+ /plan-day
 
-Only navigate when navigation would genuinely help.
+Travel, trips, holidays or vacations:
+ /trip-planner
 
-Do NOT navigate just because a keyword happens to appear.
+Scanning a letter or document:
+ /scanner
 
-Do NOT navigate for normal conversation.
+General "what should I do?" or "I don't understand":
+ /what-do-i-do
 
-Do NOT navigate for questions that can be answered directly without opening a page.
+EXAMPLES IN ANY LANGUAGE SHOULD BE UNDERSTOOD BY MEANING, NOT ONLY BY EXACT WORD MATCHING.
 
-If the user says something like:
-"I don't know anything about housing"
-"Help me find housing"
-"What do I do about transport?"
-"I don't understand how public transport works"
-"Where can I get healthcare?"
-"I need a job"
-"I don't understand my documents"
+For example, if a user speaks Urdu and asks about finding a house, use /housing.
 
-then navigation IS appropriate.
+If a user speaks Hindi and asks about trains or buses, use /transport.
 
-The user does not have to explicitly say "open the housing page".
+If a user speaks Dutch and asks about their huisarts, use /healthcare.
 
-Understand intent and navigate automatically.
+If a user speaks Arabic and asks about their documents, use /documents.
 
-The assistant should still answer naturally after navigation when appropriate.
-                            `.trim(),
+If a user speaks German and asks about getting a job, use /work.
 
-                          parameters: {
-                            type:
-                              "OBJECT",
+If a user speaks French and asks about university, use /study.
 
-                            properties: {
-                              path: {
-                                type:
-                                  "STRING",
+If a user speaks Spanish and asks about taxes or benefits, use /money.
 
-                                enum: [
-                                  "/dashboard",
-                                  "/dutch-phone-number",
-                                  "/housing",
-                                  "/documents",
-                                  "/healthcare",
-                                  "/money",
-                                  "/work",
-                                  "/study",
-                                  "/transport",
-                                  "/municipality",
-                                  "/vehicles",
-                                  "/waste",
-                                  "/explore",
-                                  "/plan-day",
-                                  "/trip-planner",
-                                  "/scanner",
-                                  "/what-do-i-do",
-                                ],
-                              },
+Do not navigate for casual conversation.
+
+Do not navigate merely because one random word happens to match.
+
+Navigation should happen when the user's INTENT clearly relates to one of the available sections.
+
+Return only one valid canonical path from the allowed list.
+                        `.trim(),
+
+                        parameters: {
+                          type:
+                            "OBJECT",
+
+                          properties: {
+                            path: {
+                              type:
+                                "STRING",
+
+                              enum: [
+                                "/dashboard",
+                                "/dutch-phone-number",
+                                "/housing",
+                                "/documents",
+                                "/healthcare",
+                                "/money",
+                                "/work",
+                                "/study",
+                                "/transport",
+                                "/municipality",
+                                "/vehicles",
+                                "/waste",
+                                "/explore",
+                                "/plan-day",
+                                "/trip-planner",
+                                "/scanner",
+                                "/what-do-i-do",
+                              ],
                             },
-
-                            required: [
-                              "path",
-                            ],
                           },
+
+                          required: [
+                            "path",
+                          ],
                         },
-                      ],
+                      },
+                    ],
                   },
                 ],
               },
@@ -1427,7 +2578,7 @@ The assistant should still answer naturally after navigation when appropriate.
           );
 
           console.log(
-            "📤 Gemini setup sent."
+            "📤 Multilingual Gemini setup message sent."
           );
         } catch (error) {
           console.error(
@@ -1465,41 +2616,43 @@ The assistant should still answer naturally after navigation when appropriate.
       // ERROR
       // --------------------------------------------------------
 
-      socket.onerror = (event) => {
-        console.error(
-          "❌ WebSocket error:",
-          event
-        );
+      socket.onerror =
+        (event) => {
+          console.error(
+            "❌ WebSocket error:",
+            event
+          );
 
-        setError(
-          "Gemini voice connection encountered a problem."
-        );
+          setError(
+            "Gemini voice connection encountered a problem."
+          );
 
-        setConnecting(false);
-      };
+          setConnecting(false);
+        };
 
       // --------------------------------------------------------
       // CLOSE
       // --------------------------------------------------------
 
-      socket.onclose = (event) => {
-        console.log(
-          "🔴 WebSocket closed.",
-          {
-            code: event.code,
-            reason: event.reason,
-          }
-        );
+      socket.onclose =
+        (event) => {
+          console.log(
+            "🔴 WebSocket closed.",
+            {
+              code: event.code,
+              reason: event.reason,
+            }
+          );
 
-        setConnected(false);
-        setConnecting(false);
-        setListening(false);
+          setConnected(false);
+          setConnecting(false);
+          setListening(false);
 
-        stopAllAudio();
+          stopAllAudio();
 
-        microphoneStartedRef.current =
-          false;
-      };
+          microphoneStartedRef.current =
+            false;
+        };
     } catch (error) {
       console.error(
         "❌ Voice startup error:",
@@ -1538,7 +2691,6 @@ The assistant should still answer naturally after navigation when appropriate.
       stopAllAudio();
 
       processorRef.current?.disconnect();
-
       microphoneSourceRef.current?.disconnect();
 
       microphoneStreamRef.current
@@ -1547,8 +2699,7 @@ The assistant should still answer naturally after navigation when appropriate.
           track.stop();
         });
 
-      microphoneStreamRef.current =
-        null;
+      microphoneStreamRef.current = null;
 
       if (
         microphoneContextRef.current
@@ -1558,8 +2709,7 @@ The assistant should still answer naturally after navigation when appropriate.
           .catch(() => {});
       }
 
-      microphoneContextRef.current =
-        null;
+      microphoneContextRef.current = null;
 
       if (
         outputContextRef.current
@@ -1569,8 +2719,7 @@ The assistant should still answer naturally after navigation when appropriate.
           .catch(() => {});
       }
 
-      outputContextRef.current =
-        null;
+      outputContextRef.current = null;
 
       if (
         websocketRef.current
@@ -1580,20 +2729,14 @@ The assistant should still answer naturally after navigation when appropriate.
         } catch {}
       }
 
-      websocketRef.current =
-        null;
+      websocketRef.current = null;
 
-      processorRef.current =
-        null;
+      processorRef.current = null;
+      microphoneSourceRef.current = null;
 
-      microphoneSourceRef.current =
-        null;
-
-      microphoneStartedRef.current =
-        false;
-
-      greetingSentRef.current =
-        false;
+      microphoneStartedRef.current = false;
+      greetingSentRef.current = false;
+      lastNavigationTextRef.current = "";
     } catch (error) {
       console.error(
         "Cleanup error:",
@@ -1614,8 +2757,7 @@ The assistant should still answer naturally after navigation when appropriate.
     setListening(false);
     setSpeaking(false);
 
-    isNavigatingRef.current =
-      false;
+    isNavigatingRef.current = false;
   }
 
   // ============================================================
@@ -1672,7 +2814,6 @@ The assistant should still answer naturally after navigation when appropriate.
           shadow-2xl
           transition-all
           duration-200
-
           ${
             speaking
               ? "bg-green-500 text-white shadow-green-500/50 ring-4 ring-green-200"
@@ -1681,7 +2822,7 @@ The assistant should still answer naturally after navigation when appropriate.
               : connecting
               ? "cursor-wait bg-indigo-600 text-white"
               : connected
-              ? "bg-red-500 text-white hover:scale-110"
+              ? "bg-orange-500 text-white hover:scale-110 hover:bg-orange-600 shadow-orange-500/40"
               : "bg-orange-500 text-white hover:scale-110 hover:bg-orange-600"
           }
         `}
@@ -1711,16 +2852,17 @@ The assistant should still answer naturally after navigation when appropriate.
           </div>
         )}
 
-      {connected && speaking && (
-        <div className="fixed bottom-24 right-6 z-[9998] rounded-full bg-white px-4 py-2 text-sm font-bold text-green-600 shadow-xl">
-          🔊 I'm here with you
-        </div>
-      )}
+      {connected &&
+        speaking && (
+          <div className="fixed bottom-24 right-6 z-[9998] rounded-full bg-white px-4 py-2 text-sm font-bold text-green-600 shadow-xl">
+            🔊 I'm here with you
+          </div>
+        )}
 
       {connected &&
         !listening &&
         !speaking && (
-          <div className="fixed bottom-24 right-6 z-[9998] rounded-full bg-white px-4 py-2 text-sm font-bold text-red-500 shadow-xl">
+          <div className="fixed bottom-24 right-6 z-[9998] rounded-full bg-white px-4 py-2 text-sm font-bold text-orange-500 shadow-xl">
             🎤 I'm here whenever you need me
           </div>
         )}
