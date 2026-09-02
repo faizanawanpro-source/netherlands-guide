@@ -1,157 +1,276 @@
-import Groq from "groq-sdk";
+import OpenAI from "openai";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+type Deadline = {
+  date: string;
+  description: string;
+  importance: "high" | "medium" | "low";
+  relativeDescription: string;
+};
+
+type Payment = {
+  amount: string;
+  currency: string;
+  dueDate: string;
+  recipient: string;
+  paymentReference: string;
+};
+
+type Appointment = {
+  organization: string;
+  appointmentDate: string;
+  description: string;
+  officialUrl: string;
+};
+
+type ScanResult = {
+  documentType: string;
+  sender: string;
+  subject: string;
+  summary: string;
+  whatYouNeedToDo: string[];
+  deadlines: Deadline[];
+  payments: Payment[];
+  appointments: Appointment[];
+  requiredDocuments: string[];
+  consequences: string;
+  importance: "high" | "medium" | "low";
+  replyNeeded: boolean;
+  appointmentNeeded: boolean;
+  officialUrl: string;
+  explanation: string;
+};
 
 export async function POST(request: Request) {
   try {
-    // ============================================================
-    // CHECK GROQ API KEY
-    // ============================================================
+    const apiKey = process.env.GROQ_API_KEY;
 
-    if (!process.env.GROQ_API_KEY) {
-      console.error(
-        "GROQ_API_KEY is missing from .env.local"
-      );
-
+    if (!apiKey) {
       return NextResponse.json(
         {
-          error:
-            "GROQ_API_KEY is missing from .env.local",
+          error: "GROQ_API_KEY is missing.",
         },
         { status: 500 }
       );
     }
 
-    // ============================================================
-    // READ FORM DATA
-    // ============================================================
-
     const formData = await request.formData();
 
-    const image = formData.get("image");
+    const file =
+      formData.get("file") ||
+      formData.get("image");
 
     const language = String(
       formData.get("language") || "English"
     );
 
-    // ============================================================
-    // VALIDATE IMAGE
-    // ============================================================
-
-    if (!(image instanceof File)) {
+    if (!(file instanceof File)) {
       return NextResponse.json(
         {
-          error:
-            'No image received. Please upload an image using the field "image".',
+          error: "Please upload a letter.",
         },
         { status: 400 }
       );
     }
 
-    if (!image.type.startsWith("image/")) {
+    if (!file.type.startsWith("image/")) {
       return NextResponse.json(
         {
           error:
-            "Please upload an image such as JPG, JPEG, PNG, or HEIC.",
+            "Please upload a photo or image of the letter.",
         },
         { status: 400 }
       );
     }
 
-    // ============================================================
-    // CONVERT IMAGE TO BASE64
-    // ============================================================
+    if (file.size > 20 * 1024 * 1024) {
+      return NextResponse.json(
+        {
+          error:
+            "The image is too large. Please upload an image smaller than 20 MB.",
+        },
+        { status: 400 }
+      );
+    }
 
-    const bytes = await image.arrayBuffer();
+    const bytes = await file.arrayBuffer();
 
-    const base64 = Buffer.from(bytes).toString("base64");
+    const base64 =
+      Buffer.from(bytes).toString("base64");
 
-    const mimeType = image.type || "image/jpeg";
+    const mimeType =
+      file.type || "image/jpeg";
 
     const imageUrl =
       `data:${mimeType};base64,${base64}`;
 
-    // ============================================================
-    // AI INSTRUCTIONS
-    // ============================================================
+    const groq = new OpenAI({
+      apiKey,
+      baseURL:
+        "https://api.groq.com/openai/v1",
+    });
 
     const prompt = `
 You are Netherlands Guide AI.
 
-The user uploaded an official Dutch letter.
+Read the uploaded Dutch official letter carefully and explain it to the
+user in ${language}.
 
-Read the letter carefully and explain it in ${language}
-using very simple and clear language.
+Do not invent information. Only use information visible in the document.
 
-Explain:
+Extract important actions, deadlines, payments, appointments, required
+documents and consequences.
 
-1. Who sent the letter
-2. What the letter is about
-3. What the user needs to do
-4. Important deadlines
-5. Payments or amounts
-6. Appointments
-7. Documents needed
-8. What happens if the user does nothing
-9. A short simple summary
+DEADLINES:
 
-IMPORTANT RULES:
+There are two types.
 
-- Only use information that is actually visible in the letter.
-- Do not invent missing information.
-- Do not guess dates.
-- Do not guess amounts.
-- Keep dates and amounts accurate.
-- If something cannot be read clearly, say that it is unclear.
-- If part of the letter is unreadable, tell the user.
-- Do not give legal advice.
-- Do not claim something is required unless the letter says so.
-- Explain Dutch government terminology in simple language.
-- If the letter contains an important deadline, make it very clear.
-- If the letter contains contact information, explain who the user should contact.
-- Keep the explanation practical and easy for someone who may not speak Dutch fluently.
+EXACT:
+If the document gives an exact calendar date, put it in "date" using
+YYYY-MM-DD.
 
-The user wants to understand the letter, not receive a complicated translation.
+RELATIVE:
+If it says things such as "within 15 days after receiving this letter",
+"within 14 days", "binnen 15 dagen na ontvangst", or similar:
 
-Answer in ${language}.
+- "date" must be ""
+- "relativeDescription" must contain the relative deadline
+- "description" must clearly explain the deadline
+- Never calculate an exact date unless the document provides enough
+  information to do so safely.
+
+The date printed on a letter is NOT automatically the date the user
+received it.
+
+PAYMENTS:
+
+Only include payments that the document actually requests or describes.
+
+Extract:
+- amount
+- currency
+- dueDate
+- recipient
+- paymentReference
+
+If the payment deadline is relative and there is no exact date, leave
+"dueDate" empty.
+
+Never invent payment information.
+
+APPOINTMENTS:
+
+Only include an appointment when the document clearly requires,
+requests or instructs the user to make or attend one.
+
+Extract:
+- organization
+- appointmentDate
+- description
+- officialUrl
+
+Never invent a URL.
+
+REPLY:
+
+Set replyNeeded to true only when the document clearly requires or
+requests a reply.
+
+IMPORTANCE:
+
+high = serious financial, legal, benefits, immigration, healthcare or
+other important consequences.
+
+medium = important but not immediately critical.
+
+low = mainly informational.
+
+WHAT YOU NEED TO DO:
+
+Give practical actions supported by the document. Do not merely translate
+the letter.
+
+CONSEQUENCES:
+
+Only state consequences that are actually supported by the document.
+
+Return ONLY valid JSON.
+
+Use exactly this structure:
+
+{
+  "documentType": "",
+  "sender": "",
+  "subject": "",
+  "summary": "",
+  "whatYouNeedToDo": [],
+  "deadlines": [
+    {
+      "date": "",
+      "description": "",
+      "importance": "high",
+      "relativeDescription": ""
+    }
+  ],
+  "payments": [
+    {
+      "amount": "",
+      "currency": "",
+      "dueDate": "",
+      "recipient": "",
+      "paymentReference": ""
+    }
+  ],
+  "appointments": [
+    {
+      "organization": "",
+      "appointmentDate": "",
+      "description": "",
+      "officialUrl": ""
+    }
+  ],
+  "requiredDocuments": [],
+  "consequences": "",
+  "importance": "medium",
+  "replyNeeded": false,
+  "appointmentNeeded": false,
+  "officialUrl": "",
+  "explanation": ""
+}
+
+The explanation should clearly answer:
+
+1. What is this letter?
+2. Who sent it?
+3. What does it mean?
+4. What does the user need to do?
+5. Is there a deadline?
+6. Is there money to pay?
+7. Is an appointment needed?
+8. Are documents needed?
+9. What happens if the user does nothing?
+
+Use simple language.
+
+Do not invent missing information.
 `;
-
-    // ============================================================
-    // CALL GROQ VISION MODEL
-    // ============================================================
 
     const response =
       await groq.chat.completions.create({
         model: "qwen/qwen3.6-27b",
 
-        temperature: 0.2,
-
-        max_completion_tokens: 1500,
-
         messages: [
           {
-            role: "system",
-            content:
-              "You are a careful document-reading assistant specializing in Dutch letters and everyday life in the Netherlands.",
-          },
-
-          {
             role: "user",
-
             content: [
               {
                 type: "text",
                 text: prompt,
               },
-
               {
                 type: "image_url",
-
                 image_url: {
                   url: imageUrl,
                 },
@@ -159,67 +278,281 @@ Answer in ${language}.
             ],
           },
         ],
+
+        response_format: {
+          type: "json_object",
+        },
+
+        temperature: 0.1,
+
+        max_completion_tokens: 3500,
+
+        reasoning_effort: "none",
+
+        stream: false,
       });
 
-    // ============================================================
-    // GET RESPONSE
-    // ============================================================
-
-    const reply =
+    const rawText =
       response.choices?.[0]?.message?.content?.trim();
 
-    if (!reply) {
+    if (!rawText) {
       console.error(
-        "Groq returned an empty scanner response."
+        "Groq returned an empty response."
       );
 
       return NextResponse.json(
         {
           error:
-            "The AI returned no explanation.",
+            "The AI could not analyse the document. Please try again.",
         },
         { status: 500 }
       );
     }
 
-    // ============================================================
-    // DEBUG
-    // ============================================================
+    let parsed: ScanResult;
 
-    console.log(
-      "========== GROQ SCANNER RESPONSE =========="
-    );
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      console.error(
+        "Groq returned invalid JSON:",
+        rawText
+      );
 
-    console.log(reply);
+      return NextResponse.json(
+        {
+          error:
+            "The AI read the document, but the analysis format was invalid. Please try again.",
+        },
+        { status: 500 }
+      );
+    }
 
-    console.log(
-      "==========================================="
-    );
+    const result: ScanResult = {
+      documentType:
+        typeof parsed.documentType === "string"
+          ? parsed.documentType
+          : "",
 
-    // ============================================================
-    // RETURN
-    // ============================================================
+      sender:
+        typeof parsed.sender === "string"
+          ? parsed.sender
+          : "",
+
+      subject:
+        typeof parsed.subject === "string"
+          ? parsed.subject
+          : "",
+
+      summary:
+        typeof parsed.summary === "string"
+          ? parsed.summary
+          : "",
+
+      whatYouNeedToDo:
+        Array.isArray(parsed.whatYouNeedToDo)
+          ? parsed.whatYouNeedToDo.filter(
+              (item): item is string =>
+                typeof item === "string"
+            )
+          : [],
+
+      deadlines:
+        Array.isArray(parsed.deadlines)
+          ? parsed.deadlines.map(
+              (deadline: any) => ({
+                date:
+                  typeof deadline?.date ===
+                  "string"
+                    ? deadline.date
+                    : "",
+
+                description:
+                  typeof deadline?.description ===
+                  "string"
+                    ? deadline.description
+                    : "",
+
+                importance:
+                  deadline?.importance ===
+                    "high" ||
+                  deadline?.importance ===
+                    "medium" ||
+                  deadline?.importance ===
+                    "low"
+                    ? deadline.importance
+                    : "medium",
+
+                relativeDescription:
+                  typeof deadline?.relativeDescription ===
+                  "string"
+                    ? deadline.relativeDescription
+                    : "",
+              })
+            )
+          : [],
+
+      payments:
+        Array.isArray(parsed.payments)
+          ? parsed.payments.map(
+              (payment: any) => ({
+                amount:
+                  typeof payment?.amount ===
+                  "string"
+                    ? payment.amount
+                    : String(
+                        payment?.amount ?? ""
+                      ),
+
+                currency:
+                  typeof payment?.currency ===
+                  "string"
+                    ? payment.currency
+                    : "",
+
+                dueDate:
+                  typeof payment?.dueDate ===
+                  "string"
+                    ? payment.dueDate
+                    : "",
+
+                recipient:
+                  typeof payment?.recipient ===
+                  "string"
+                    ? payment.recipient
+                    : "",
+
+                paymentReference:
+                  typeof payment?.paymentReference ===
+                  "string"
+                    ? payment.paymentReference
+                    : "",
+              })
+            )
+          : [],
+
+      appointments:
+        Array.isArray(parsed.appointments)
+          ? parsed.appointments.map(
+              (appointment: any) => ({
+                organization:
+                  typeof appointment?.organization ===
+                  "string"
+                    ? appointment.organization
+                    : "",
+
+                appointmentDate:
+                  typeof appointment?.appointmentDate ===
+                  "string"
+                    ? appointment.appointmentDate
+                    : "",
+
+                description:
+                  typeof appointment?.description ===
+                  "string"
+                    ? appointment.description
+                    : "",
+
+                officialUrl:
+                  typeof appointment?.officialUrl ===
+                  "string"
+                    ? appointment.officialUrl
+                    : "",
+              })
+            )
+          : [],
+
+      requiredDocuments:
+        Array.isArray(parsed.requiredDocuments)
+          ? parsed.requiredDocuments.filter(
+              (item): item is string =>
+                typeof item === "string"
+            )
+          : [],
+
+      consequences:
+        typeof parsed.consequences === "string"
+          ? parsed.consequences
+          : "",
+
+      importance:
+        parsed.importance === "high" ||
+        parsed.importance === "medium" ||
+        parsed.importance === "low"
+          ? parsed.importance
+          : "medium",
+
+      replyNeeded:
+        Boolean(parsed.replyNeeded),
+
+      appointmentNeeded:
+        Boolean(parsed.appointmentNeeded),
+
+      officialUrl:
+        typeof parsed.officialUrl === "string"
+          ? parsed.officialUrl
+          : "",
+
+      explanation:
+        typeof parsed.explanation === "string"
+          ? parsed.explanation
+          : "",
+    };
 
     return NextResponse.json({
       success: true,
-      reply,
+      ...result,
     });
   } catch (error: any) {
     console.error(
-      "========== GROQ SCANNER ERROR =========="
+      "Letter scanning error:",
+      error
     );
 
-    console.error(error);
+    const message =
+      error?.message ||
+      error?.error?.message ||
+      "";
 
-    console.error(
-      "========================================"
-    );
+    if (
+      message
+        .toLowerCase()
+        .includes("rate limit")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "The AI service is temporarily busy. Please wait a moment and try again.",
+        },
+        { status: 429 }
+      );
+    }
+
+    if (
+      message
+        .toLowerCase()
+        .includes("authentication") ||
+      message
+        .toLowerCase()
+        .includes("api key") ||
+      message
+        .toLowerCase()
+        .includes("unauthorized")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "The Groq API key could not be authenticated. Please check your GROQ_API_KEY.",
+        },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json(
       {
         error:
-          error?.message ||
-          "Could not analyse the letter.",
+          message ||
+          "Could not analyse the letter. Please try again.",
       },
       { status: 500 }
     );
