@@ -21,7 +21,6 @@ import {
   Recycle,
   ScanLine,
   Settings,
-  ShieldAlert,
   Sparkles,
   TrainFront,
   User,
@@ -120,13 +119,6 @@ const tools: Record<ProfileType, Tool[]> = {
       iconBg: "bg-cyan-400/15 ring-cyan-300/20",
     },
     {
-      href: "/what-do-i-do",
-      icon: "🚨",
-      key: "emergency",
-      color: "from-red-950 via-rose-900 to-red-950",
-      iconBg: "bg-red-400/15 ring-red-300/20",
-    },
-    {
       href: "/waste",
       icon: "♻️",
       key: "waste",
@@ -200,13 +192,6 @@ const tools: Record<ProfileType, Tool[]> = {
       iconBg: "bg-red-400/15 ring-red-300/20",
     },
     {
-      href: "/what-do-i-do",
-      icon: "🚨",
-      key: "emergency",
-      color: "from-red-950 via-rose-900 to-red-950",
-      iconBg: "bg-red-400/15 ring-red-300/20",
-    },
-    {
       href: "/waste",
       icon: "♻️",
       key: "waste",
@@ -271,13 +256,6 @@ const tools: Record<ProfileType, Tool[]> = {
       key: "planDay",
       color: "from-orange-950 via-amber-900 to-orange-950",
       iconBg: "bg-orange-400/15 ring-orange-300/20",
-    },
-    {
-      href: "/what-do-i-do",
-      icon: "🚨",
-      key: "emergency",
-      color: "from-red-950 via-rose-900 to-red-950",
-      iconBg: "bg-red-400/15 ring-red-300/20",
     },
   ],
 
@@ -353,13 +331,6 @@ const tools: Record<ProfileType, Tool[]> = {
       iconBg: "bg-emerald-400/15 ring-emerald-300/20",
     },
     {
-      href: "/what-do-i-do",
-      icon: "🚨",
-      key: "emergency",
-      color: "from-red-950 via-rose-900 to-red-950",
-      iconBg: "bg-red-400/15 ring-red-300/20",
-    },
-    {
       href: "/explore",
       icon: "🗺️",
       key: "explore",
@@ -417,13 +388,6 @@ const tools: Record<ProfileType, Tool[]> = {
       key: "waste",
       color: "from-green-950 via-emerald-900 to-green-950",
       iconBg: "bg-emerald-400/15 ring-emerald-300/20",
-    },
-    {
-      href: "/what-do-i-do",
-      icon: "🚨",
-      key: "emergency",
-      color: "from-red-950 via-rose-900 to-red-950",
-      iconBg: "bg-red-400/15 ring-red-300/20",
     },
     {
       href: "/explore",
@@ -595,16 +559,6 @@ const serviceVisuals: Record<
     pattern: "bg-blue-400/10",
   },
 
-  emergency: {
-    icon: ShieldAlert,
-    gradient:
-      "from-red-950 via-rose-900 to-red-950",
-    iconBg:
-      "bg-red-400/15 ring-red-300/20",
-    accent: "text-red-200",
-    pattern: "bg-red-400/10",
-  },
-
   explore: {
     icon: MapPinned,
     gradient:
@@ -743,7 +697,7 @@ export default function DashboardPage() {
     >
       {/* HEADER */}
 
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#07111f]/95 text-white shadow-[0_10px_40px_rgba(2,8,23,0.15)] backdrop-blur-2xl">
+      <header className="border-b border-white/10 bg-[#07111f]/95 text-white shadow-[0_10px_40px_rgba(2,8,23,0.15)] backdrop-blur-2xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-7">
           <Link
             href="/dashboard"
@@ -1362,40 +1316,6 @@ export default function DashboardPage() {
             </div>
           </section>
         )}
-
-        {/* EMERGENCY */}
-
-        <section className="mt-11 sm:mt-14">
-          <div className="rounded-[1.75rem] border border-red-100 bg-gradient-to-r from-red-50 to-rose-50 p-5 sm:p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-600">
-                  <ShieldAlert className="h-5 w-5" />
-                </div>
-
-                <div>
-                  <h2 className="font-black text-red-950">
-                    {t.emergency}
-                  </h2>
-
-                  <p className="mt-1 max-w-2xl text-xs leading-5 text-red-800">
-                    {
-                      t.emergencyDescription
-                    }
-                  </p>
-                </div>
-              </div>
-
-              <a
-                href="tel:112"
-                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-red-700"
-              >
-                <Phone className="h-4 w-4" />
-                {t.call112}
-              </a>
-            </div>
-          </div>
-        </section>
 
         {/* FOOTER */}
 

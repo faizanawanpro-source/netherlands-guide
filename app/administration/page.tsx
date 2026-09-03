@@ -82,6 +82,9 @@ export default function AdministrationPage() {
   const [deletingDocumentId, setDeletingDocumentId] =
     useState<string | null>(null);
 
+  const [updatingPaymentId, setUpdatingPaymentId] =
+    useState<string | null>(null);
+
   useEffect(() => {
     loadAdministration();
   }, []);
@@ -273,30 +276,6 @@ export default function AdministrationPage() {
               document.id !== documentId
           )
       );
-
-      setDeadlines(
-        (current) =>
-          current.filter(
-            (deadline) =>
-              true
-          )
-      );
-
-      setPayments(
-        (current) =>
-          current.filter(
-            (payment) =>
-              true
-          )
-      );
-
-      setAppointments(
-        (current) =>
-          current.filter(
-            (appointment) =>
-              true
-          )
-      );
     } catch (err) {
       console.error(
         "Document deletion error:",
@@ -308,6 +287,94 @@ export default function AdministrationPage() {
       );
     } finally {
       setDeletingDocumentId(null);
+    }
+  }
+
+  async function togglePaymentStatus(
+    paymentId: string,
+    completed: boolean
+  ) {
+    try {
+      setUpdatingPaymentId(paymentId);
+      setError("");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        setError(
+          "Your session could not be found. Please sign in again."
+        );
+        return;
+      }
+
+      const {
+        data,
+        error: updateError,
+      } = await supabase
+        .from("payments")
+        .update({
+          completed,
+        })
+        .eq(
+          "id",
+          paymentId
+        )
+        .eq(
+          "user_id",
+          session.user.id
+        )
+        .select(
+          "id, amount, currency, due_date, recipient, payment_reference, completed"
+        )
+        .single();
+
+      if (updateError) {
+        console.error(
+          "Payment status update error:",
+          updateError
+        );
+
+        setError(
+          "We could not update the payment status. Please try again."
+        );
+
+        return;
+      }
+
+      if (!data) {
+        setError(
+          "The payment status could not be updated. Please try again."
+        );
+
+        return;
+      }
+
+      setPayments(
+        (current) =>
+          current.map(
+            (payment) =>
+              payment.id === paymentId
+                ? {
+                    ...payment,
+                    completed:
+                      data.completed,
+                  }
+                : payment
+          )
+      );
+    } catch (err) {
+      console.error(
+        "Payment status error:",
+        err
+      );
+
+      setError(
+        "Something went wrong while updating the payment."
+      );
+    } finally {
+      setUpdatingPaymentId(null);
     }
   }
 
@@ -778,12 +845,12 @@ export default function AdministrationPage() {
       {/* Header */}
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
-          <Link
+          <a
             href="/dashboard"
-            className="text-xl font-bold tracking-tight text-slate-900"
+            className="flex items-center gap-2 rounded-xl px-2 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
           >
-            🇳🇱 Netherlands Guide
-          </Link>
+            ← Back to Home
+          </a>
 
           <Link
             href="/scanner"
@@ -1245,15 +1312,72 @@ export default function AdministrationPage() {
                           )}
                         </div>
 
-                        <div className="mt-5">
+                        {/* PAYMENT STATUS */}
+                        <div className="mt-5 flex flex-col gap-3">
                           {payment.completed ? (
-                            <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-                              ✓ Completed
-                            </span>
+                            <div className="flex items-center justify-between gap-3 rounded-2xl border border-green-200 bg-green-50 p-4">
+                              <div>
+                                <p className="text-sm font-bold text-green-800">
+                                  ✓ Paid
+                                </p>
+
+                                <p className="mt-1 text-xs text-green-700">
+                                  This payment has been marked as paid.
+                                </p>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  togglePaymentStatus(
+                                    payment.id,
+                                    false
+                                  )
+                                }
+                                disabled={
+                                  updatingPaymentId ===
+                                  payment.id
+                                }
+                                className="rounded-xl border border-green-200 bg-white px-4 py-2 text-sm font-semibold text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {updatingPaymentId ===
+                                payment.id
+                                  ? "Updating..."
+                                  : "Mark as not paid"}
+                              </button>
+                            </div>
                           ) : (
-                            <span className="inline-flex rounded-full bg-orange-100 px-3 py-1 text-sm font-semibold text-orange-700">
-                              Payment not completed
-                            </span>
+                            <div className="flex items-center justify-between gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-4">
+                              <div>
+                                <p className="text-sm font-bold text-orange-800">
+                                  🔴 Not Paid
+                                </p>
+
+                                <p className="mt-1 text-xs text-orange-700">
+                                  This payment still needs to be handled.
+                                </p>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  togglePaymentStatus(
+                                    payment.id,
+                                    true
+                                  )
+                                }
+                                disabled={
+                                  updatingPaymentId ===
+                                  payment.id
+                                }
+                                className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {updatingPaymentId ===
+                                payment.id
+                                  ? "Updating..."
+                                  : "Mark as paid"}
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>

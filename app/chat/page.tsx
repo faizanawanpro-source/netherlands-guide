@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 
 type Profile = {
@@ -121,9 +122,28 @@ export default function ChatPage() {
 
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-5 py-4">
 
+          {/* BACK TO HOME */}
+
+          <Link
+            href="/dashboard"
+            className="flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          >
+            <span className="text-lg">
+              ←
+            </span>
+
+            <span>
+              Back to Home
+            </span>
+          </Link>
+
+          {/* LOGO */}
+
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-500 text-2xl">
             🇳🇱
           </div>
+
+          {/* TITLE */}
 
           <div>
             <h1 className="font-black">

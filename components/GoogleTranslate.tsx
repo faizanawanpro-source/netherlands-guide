@@ -37,16 +37,6 @@ const languageMap: Record<string, string> = {
  * ============================================================
  * GET APP LANGUAGE
  * ============================================================
- *
- * IMPORTANT:
- *
- * This ONLY reads the separate app language.
- *
- * It does NOT read:
- *
- * netherlandsGuideProfile.language
- *
- * because that belongs to the Voice Assistant.
  */
 
 function getSelectedLanguage(): string {
@@ -59,10 +49,7 @@ function getSelectedLanguage(): string {
       return savedLanguage;
     }
   } catch (error) {
-    console.warn(
-      "Could not read app language:",
-      error
-    );
+    console.warn("Could not read app language:", error);
   }
 
   return "English";
@@ -74,9 +61,7 @@ function getSelectedLanguage(): string {
  * ============================================================
  */
 
-function getGoogleLanguage(
-  language: string
-): string {
+function getGoogleLanguage(language: string): string {
   return languageMap[language] || "en";
 }
 
@@ -86,24 +71,16 @@ function getGoogleLanguage(
  * ============================================================
  */
 
-function setGoogleTranslateLanguage(
-  language: string
-) {
-  const googleLanguage =
-    getGoogleLanguage(language);
+function setGoogleTranslateLanguage(language: string) {
+  const googleLanguage = getGoogleLanguage(language);
 
   /*
    * ==========================================================
    * ENGLISH
    * ==========================================================
-   *
-   * English is the original language of the app.
-   *
-   * Remove Google Translate's translation cookie.
    */
 
   if (googleLanguage === "en") {
-
     document.cookie =
       "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
 
@@ -111,12 +88,9 @@ function setGoogleTranslateLanguage(
       `googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname};`;
 
     const select =
-      document.querySelector<HTMLSelectElement>(
-        ".goog-te-combo"
-      );
+      document.querySelector<HTMLSelectElement>(".goog-te-combo");
 
     if (select) {
-
       select.value = "en";
 
       select.dispatchEvent(
@@ -124,7 +98,6 @@ function setGoogleTranslateLanguage(
           bubbles: true,
         })
       );
-
     }
 
     return;
@@ -136,8 +109,7 @@ function setGoogleTranslateLanguage(
    * ==========================================================
    */
 
-  const cookieValue =
-    `/en/${googleLanguage}`;
+  const cookieValue = `/en/${googleLanguage}`;
 
   document.cookie =
     `googtrans=${cookieValue}; path=/;`;
@@ -146,12 +118,9 @@ function setGoogleTranslateLanguage(
     `googtrans=${cookieValue}; path=/; domain=${window.location.hostname};`;
 
   const select =
-    document.querySelector<HTMLSelectElement>(
-      ".goog-te-combo"
-    );
+    document.querySelector<HTMLSelectElement>(".goog-te-combo");
 
   if (select) {
-
     select.value = googleLanguage;
 
     select.dispatchEvent(
@@ -159,7 +128,6 @@ function setGoogleTranslateLanguage(
         bubbles: true,
       })
     );
-
   }
 }
 
@@ -170,23 +138,21 @@ function setGoogleTranslateLanguage(
  */
 
 export default function GoogleTranslate() {
-
   useEffect(() => {
-
     let cancelled = false;
 
     /*
      * ========================================================
-     * HIDE GOOGLE'S DEFAULT UI
+     * HIDE GOOGLE TRANSLATE UI
      * ========================================================
      *
-     * We use our own App language buttons.
+     * Google Translate is still loaded and used as the
+     * translation engine.
      *
-     * Google Translate works in the background.
+     * Only Google's visible interface is hidden.
      */
 
-    const style =
-      document.createElement("style");
+    const style = document.createElement("style");
 
     style.setAttribute(
       "data-netherway-google-translate",
@@ -194,36 +160,117 @@ export default function GoogleTranslate() {
     );
 
     style.textContent = `
+      /*
+       * Hide the Google Translate container completely.
+       * The Google widget still exists in the DOM so that
+       * JavaScript can control its language selector.
+       */
+
       #google_translate_element {
         position: fixed !important;
-        width: 1px !important;
-        height: 1px !important;
+        width: 0 !important;
+        height: 0 !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        max-width: 0 !important;
+        max-height: 0 !important;
         overflow: hidden !important;
         opacity: 0 !important;
+        visibility: hidden !important;
         pointer-events: none !important;
-        z-index: -1 !important;
-        left: -9999px !important;
-        bottom: -9999px !important;
+        z-index: -999999 !important;
+        left: -999999px !important;
+        top: -999999px !important;
       }
 
-      .goog-te-banner-frame {
+      /*
+       * Google Translate top banner / toolbar
+       */
+
+      .goog-te-banner-frame,
+      .goog-te-banner-frame.skiptranslate,
+      iframe.goog-te-banner-frame,
+      body > .skiptranslate {
         display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        width: 0 !important;
+        max-height: 0 !important;
+        max-width: 0 !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
       }
 
+      /*
+       * Prevent Google from pushing the entire page down.
+       */
+
+      html,
       body {
         top: 0 !important;
+        margin-top: 0 !important;
       }
 
-      .goog-te-gadget {
-        font-size: 0 !important;
-      }
+      /*
+       * Hide Google's visible gadget/dropdown.
+       */
 
-      .goog-te-gadget span {
+      .goog-te-gadget,
+      .goog-te-gadget-simple,
+      .goog-te-gadget-icon,
+      .goog-te-menu-value,
+      .goog-te-menu-frame,
+      .goog-te-menu2,
+      .goog-te-spinner-pos {
         display: none !important;
+        visibility: hidden !important;
       }
 
-      .goog-te-menu-value {
+      /*
+       * Hide Google's branding/text.
+       */
+
+      .goog-te-gadget span,
+      .goog-te-gadget a,
+      .goog-te-gadget img {
         display: none !important;
+        visibility: hidden !important;
+      }
+
+      /*
+       * Hide Google Translate popups/menus if Google creates
+       * them outside the main container.
+       */
+
+      .goog-te-balloon-frame,
+      .goog-te-ftab,
+      .goog-te-ftab-float,
+      .goog-te-menu-frame {
+        display: none !important;
+        visibility: hidden !important;
+      }
+
+      /*
+       * Hide Google Translate tooltip/highlight UI.
+       */
+
+      .goog-tooltip,
+      .goog-tooltip:hover,
+      .goog-text-highlight {
+        display: none !important;
+        visibility: hidden !important;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+
+      /*
+       * Make sure the page never gets shifted by Google.
+       */
+
+      body.translated-ltr,
+      body.translated-rtl {
+        top: 0 !important;
+        margin-top: 0 !important;
       }
     `;
 
@@ -236,17 +283,13 @@ export default function GoogleTranslate() {
      */
 
     const applyCurrentLanguage = () => {
-
       if (cancelled) {
         return;
       }
 
-      const selectedLanguage =
-        getSelectedLanguage();
+      const selectedLanguage = getSelectedLanguage();
 
-      setGoogleTranslateLanguage(
-        selectedLanguage
-      );
+      setGoogleTranslateLanguage(selectedLanguage);
     };
 
     /*
@@ -256,32 +299,27 @@ export default function GoogleTranslate() {
      */
 
     const initializeTranslate = () => {
-
       if (cancelled) {
         return false;
       }
 
-      const element =
-        document.getElementById(
-          "google_translate_element"
-        );
+      const element = document.getElementById(
+        "google_translate_element"
+      );
 
       if (
         !element ||
-        !window.google?.translate
-          ?.TranslateElement
+        !window.google?.translate?.TranslateElement
       ) {
         return false;
       }
 
       /*
-       * Don't initialize the Google widget twice.
+       * Don't initialize twice.
        */
 
       if (element.children.length === 0) {
-
         try {
-
           new window.google.translate.TranslateElement(
             {
               pageLanguage: "en",
@@ -293,9 +331,7 @@ export default function GoogleTranslate() {
             },
             "google_translate_element"
           );
-
         } catch (error) {
-
           console.warn(
             "Google Translate could not initialize:",
             error
@@ -306,16 +342,13 @@ export default function GoogleTranslate() {
       }
 
       /*
-       * Give Google's widget time to create its
-       * internal language selector.
+       * Give Google time to create its internal selector.
        */
 
       window.setTimeout(() => {
-
         if (!cancelled) {
           applyCurrentLanguage();
         }
-
       }, 500);
 
       return true;
@@ -337,16 +370,13 @@ export default function GoogleTranslate() {
      */
 
     if (!initializeTranslate()) {
-
       let script =
         document.querySelector<HTMLScriptElement>(
           'script[data-google-translate="true"]'
         );
 
       if (!script) {
-
-        script =
-          document.createElement("script");
+        script = document.createElement("script");
 
         script.src =
           "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
@@ -366,29 +396,18 @@ export default function GoogleTranslate() {
        * Keep checking until Google has loaded.
        */
 
-      const interval =
-        window.setInterval(() => {
-
-          if (initializeTranslate()) {
-
-            window.clearInterval(
-              interval
-            );
-
-          }
-
-        }, 500);
+      const interval = window.setInterval(() => {
+        if (initializeTranslate()) {
+          window.clearInterval(interval);
+        }
+      }, 500);
 
       /*
        * Stop checking after 15 seconds.
        */
 
       window.setTimeout(() => {
-
-        window.clearInterval(
-          interval
-        );
-
+        window.clearInterval(interval);
       }, 15000);
     }
 
@@ -396,15 +415,9 @@ export default function GoogleTranslate() {
      * ========================================================
      * APP LANGUAGE EVENT
      * ========================================================
-     *
-     * The onboarding page sends this event whenever
-     * the user chooses a new App language.
      */
 
-    const handleLanguageChange = (
-      event: Event
-    ) => {
-
+    const handleLanguageChange = (event: Event) => {
       const customEvent =
         event as CustomEvent<{
           language?: string;
@@ -419,19 +432,15 @@ export default function GoogleTranslate() {
        */
 
       try {
-
         localStorage.setItem(
           "netherlandsGuideAppLanguage",
           selectedLanguage
         );
-
       } catch (error) {
-
         console.warn(
           "Could not save app language:",
           error
         );
-
       }
 
       /*
@@ -443,20 +452,15 @@ export default function GoogleTranslate() {
       );
 
       /*
-       * Apply again after Google's widget has
-       * had time to react.
+       * Apply again after Google reacts.
        */
 
       window.setTimeout(() => {
-
         if (!cancelled) {
-
           setGoogleTranslateLanguage(
             selectedLanguage
           );
-
         }
-
       }, 700);
     };
 
@@ -472,7 +476,6 @@ export default function GoogleTranslate() {
      */
 
     return () => {
-
       cancelled = true;
 
       window.removeEventListener(
@@ -480,23 +483,19 @@ export default function GoogleTranslate() {
         handleLanguageChange
       );
 
-      if (
-        window.googleTranslateElementInit
-      ) {
-
+      if (window.googleTranslateElementInit) {
         window.googleTranslateElementInit =
           undefined;
-
       }
 
       style.remove();
     };
-
   }, []);
 
   /*
-   * Google's actual widget exists here,
-   * but CSS keeps it hidden.
+   * Google's actual widget exists here.
+   *
+   * It is invisible, but JavaScript can still control it.
    */
 
   return (

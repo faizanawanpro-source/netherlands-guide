@@ -12,6 +12,7 @@ type DocumentData = {
   subject: string | null;
   summary: string | null;
   explanation: string | null;
+  original_text: string | null;
   consequences: string | null;
   importance: string | null;
   reply_needed: boolean | null;
@@ -88,7 +89,7 @@ export default function AdministrationDocumentPage() {
       } = await supabase
         .from("documents")
         .select(
-          "id, document_type, sender, subject, summary, explanation, consequences, importance, reply_needed, appointment_needed, official_url, confidence, created_at"
+          "id, document_type, sender, subject, summary, explanation, original_text, consequences, importance, reply_needed, appointment_needed, official_url, confidence, created_at"
         )
         .eq(
           "id",
@@ -627,6 +628,33 @@ export default function AdministrationDocumentPage() {
             </p>
           </div>
         </section>
+
+        {/* Saved original letter text */}
+        {document.original_text && (
+          <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+                  📄 Original letter
+                </p>
+
+                <h2 className="mt-1 text-xl font-bold">
+                  Saved letter text
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  This is the original text saved when this letter was scanned. You do not need to scan the letter again to read it.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 max-h-[600px] overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <p className="whitespace-pre-wrap text-sm leading-7 text-slate-800">
+                {document.original_text}
+              </p>
+            </div>
+          </section>
+        )}
 
         {/* Consequences */}
         {document.consequences && (
