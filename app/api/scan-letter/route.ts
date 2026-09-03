@@ -43,6 +43,35 @@ type ScanResult = {
   explanation: string;
 };
 
+function cleanString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function cleanStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function cleanImportance(
+  value: unknown
+): "high" | "medium" | "low" {
+  if (
+    value === "high" ||
+    value === "medium" ||
+    value === "low"
+  ) {
+    return value;
+  }
+
+  return "medium";
+}
+
 export async function POST(request: Request) {
   try {
     const apiKey = process.env.GROQ_API_KEY;
@@ -64,7 +93,7 @@ export async function POST(request: Request) {
 
     const language = String(
       formData.get("language") || "English"
-    );
+    ).trim();
 
     if (!(file instanceof File)) {
       return NextResponse.json(
@@ -97,11 +126,9 @@ export async function POST(request: Request) {
 
     const bytes = await file.arrayBuffer();
 
-    const base64 =
-      Buffer.from(bytes).toString("base64");
+    const base64 = Buffer.from(bytes).toString("base64");
 
-    const mimeType =
-      file.type || "image/jpeg";
+    const mimeType = file.type || "image/jpeg";
 
     const imageUrl =
       `data:${mimeType};base64,${base64}`;
@@ -112,41 +139,82 @@ export async function POST(request: Request) {
         "https://api.groq.com/openai/v1",
     });
 
+    /*
+     * IMPORTANT:
+     *
+     * The AI first understands the Dutch document.
+     * It then explains everything in the user's selected
+     * profile language.
+     *
+     * Keep this prompt reasonably short because the Groq
+     * model has a TPM limit.
+     */
+
     const prompt = `
 You are Netherlands Guide AI.
 
-Read the uploaded Dutch official letter carefully and explain it to the
-user in ${language}.
+The user's selected profile language is:
+${language}
 
-Do not invent information. Only use information visible in the document.
+Read the uploaded Dutch official letter carefully.
 
-Extract important actions, deadlines, payments, appointments, required
-documents and consequences.
+CRITICAL LANGUAGE RULE:
+ALL USER-FACING EXPLANATIONS MUST BE WRITTEN IN ${language}.
+
+The following fields must be written in ${language}:
+- documentType
+- subject
+- summary
+- whatYouNeedToDo
+- deadline descriptions
+- payment explanations where applicable
+- appointment descriptions
+- requiredDocuments
+- consequences
+- explanation
+
+Do NOT write explanations or instructions in English unless the selected language is English.
+
+The original names of official organizations, people and companies may remain in their official form.
+
+Only use information visible in the document.
+Never invent information.
+
+Extract:
+- what the letter is
+- who sent it
+- subject
+- meaning
+- actions
+- deadlines
+- payments
+- appointments
+- required documents
+- consequences
+- whether a reply is required
 
 DEADLINES:
 
-There are two types.
+If there is an exact calendar date:
+- put it in "date" as YYYY-MM-DD
+- put the explanation in "description"
 
-EXACT:
-If the document gives an exact calendar date, put it in "date" using
-YYYY-MM-DD.
+If the document contains a relative deadline such as:
+"within 15 days after receiving this letter"
+"within 14 days"
+"binnen 15 dagen na ontvangst"
 
-RELATIVE:
-If it says things such as "within 15 days after receiving this letter",
-"within 14 days", "binnen 15 dagen na ontvangst", or similar:
-
+then:
 - "date" must be ""
 - "relativeDescription" must contain the relative deadline
-- "description" must clearly explain the deadline
-- Never calculate an exact date unless the document provides enough
-  information to do so safely.
+- "description" must explain it clearly in ${language}
+- do not calculate an exact date unless it can be safely calculated from information in the document
 
-The date printed on a letter is NOT automatically the date the user
-received it.
+The date printed on the letter is NOT automatically the date the user received it.
 
 PAYMENTS:
 
-Only include payments that the document actually requests or describes.
+Only include payments actually requested or described.
 
 Extract:
 - amount
@@ -155,46 +223,54 @@ Extract:
 - recipient
 - paymentReference
 
-If the payment deadline is relative and there is no exact date, leave
-"dueDate" empty.
-
-Never invent payment information.
+If there is no exact payment date, leave dueDate empty.
 
 APPOINTMENTS:
 
 Only include an appointment when the document clearly requires,
-requests or instructs the user to make or attend one.
+requests or instructs the user to attend or make one.
 
-Extract:
-- organization
-- appointmentDate
-- description
-- officialUrl
-
-Never invent a URL.
+Never invent an official URL.
 
 REPLY:
 
-Set replyNeeded to true only when the document clearly requires or
-requests a reply.
+Set replyNeeded to true only when the letter clearly requires or requests a reply.
 
 IMPORTANCE:
 
-high = serious financial, legal, benefits, immigration, healthcare or
-other important consequences.
+high = serious financial, legal, immigration, benefits, healthcare or similarly important consequences
 
-medium = important but not immediately critical.
+medium = important but not immediately critical
 
-low = mainly informational.
+low = mainly informational
 
 WHAT YOU NEED TO DO:
 
-Give practical actions supported by the document. Do not merely translate
-the letter.
+Give practical actions supported by the document.
+Write them in ${language}.
 
 CONSEQUENCES:
 
-Only state consequences that are actually supported by the document.
+Only state consequences actually supported by the document.
+Write them in ${language}.
+
+EXPLANATION:
+
+Write a clear, simple explanation for the user in ${language}.
+
+Explain:
+1. What is this letter?
+2. Who sent it?
+3. What does it mean?
+4. What does the user need to do?
+5. Is there a deadline?
+6. Is there money to pay?
+7. Is an appointment needed?
+8. Are documents needed?
+9. What happens if the user does nothing?
+
+Do not merely translate the letter.
+Make it understandable to someone who may not understand Dutch official letters.
 
 Return ONLY valid JSON.
 
@@ -210,7 +286,7 @@ Use exactly this structure:
     {
       "date": "",
       "description": "",
-      "importance": "high",
+      "importance": "medium",
       "relativeDescription": ""
     }
   ],
@@ -239,23 +315,11 @@ Use exactly this structure:
   "officialUrl": "",
   "explanation": ""
 }
-
-The explanation should clearly answer:
-
-1. What is this letter?
-2. Who sent it?
-3. What does it mean?
-4. What does the user need to do?
-5. Is there a deadline?
-6. Is there money to pay?
-7. Is an appointment needed?
-8. Are documents needed?
-9. What happens if the user does nothing?
-
-Use simple language.
-
-Do not invent missing information.
 `;
+
+    console.log(
+      `Scanning letter for profile language: ${language}`
+    );
 
     const response =
       await groq.chat.completions.create({
@@ -285,7 +349,11 @@ Do not invent missing information.
 
         temperature: 0.1,
 
-        max_completion_tokens: 3500,
+        /*
+         * Lower than before to reduce the chance of
+         * hitting Groq's TPM limit.
+         */
+        max_completion_tokens: 2200,
 
         reasoning_effort: "none",
 
@@ -309,7 +377,7 @@ Do not invent missing information.
       );
     }
 
-    let parsed: ScanResult;
+    let parsed: any;
 
     try {
       parsed = JSON.parse(rawText);
@@ -330,64 +398,45 @@ Do not invent missing information.
 
     const result: ScanResult = {
       documentType:
-        typeof parsed.documentType === "string"
-          ? parsed.documentType
-          : "",
+        cleanString(parsed.documentType),
 
       sender:
-        typeof parsed.sender === "string"
-          ? parsed.sender
-          : "",
+        cleanString(parsed.sender),
 
       subject:
-        typeof parsed.subject === "string"
-          ? parsed.subject
-          : "",
+        cleanString(parsed.subject),
 
       summary:
-        typeof parsed.summary === "string"
-          ? parsed.summary
-          : "",
+        cleanString(parsed.summary),
 
       whatYouNeedToDo:
-        Array.isArray(parsed.whatYouNeedToDo)
-          ? parsed.whatYouNeedToDo.filter(
-              (item): item is string =>
-                typeof item === "string"
-            )
-          : [],
+        cleanStringArray(
+          parsed.whatYouNeedToDo
+        ),
 
       deadlines:
         Array.isArray(parsed.deadlines)
           ? parsed.deadlines.map(
               (deadline: any) => ({
                 date:
-                  typeof deadline?.date ===
-                  "string"
-                    ? deadline.date
-                    : "",
+                  cleanString(
+                    deadline?.date
+                  ),
 
                 description:
-                  typeof deadline?.description ===
-                  "string"
-                    ? deadline.description
-                    : "",
+                  cleanString(
+                    deadline?.description
+                  ),
 
                 importance:
-                  deadline?.importance ===
-                    "high" ||
-                  deadline?.importance ===
-                    "medium" ||
-                  deadline?.importance ===
-                    "low"
-                    ? deadline.importance
-                    : "medium",
+                  cleanImportance(
+                    deadline?.importance
+                  ),
 
                 relativeDescription:
-                  typeof deadline?.relativeDescription ===
-                  "string"
-                    ? deadline.relativeDescription
-                    : "",
+                  cleanString(
+                    deadline?.relativeDescription
+                  ),
               })
             )
           : [],
@@ -398,105 +447,100 @@ Do not invent missing information.
               (payment: any) => ({
                 amount:
                   typeof payment?.amount ===
-                  "string"
-                    ? payment.amount
-                    : String(
-                        payment?.amount ?? ""
+                  "number"
+                    ? String(
+                        payment.amount
+                      )
+                    : cleanString(
+                        payment?.amount
                       ),
 
                 currency:
-                  typeof payment?.currency ===
-                  "string"
-                    ? payment.currency
-                    : "",
+                  cleanString(
+                    payment?.currency
+                  ),
 
                 dueDate:
-                  typeof payment?.dueDate ===
-                  "string"
-                    ? payment.dueDate
-                    : "",
+                  cleanString(
+                    payment?.dueDate
+                  ),
 
                 recipient:
-                  typeof payment?.recipient ===
-                  "string"
-                    ? payment.recipient
-                    : "",
+                  cleanString(
+                    payment?.recipient
+                  ),
 
                 paymentReference:
-                  typeof payment?.paymentReference ===
-                  "string"
-                    ? payment.paymentReference
-                    : "",
+                  cleanString(
+                    payment?.paymentReference
+                  ),
               })
             )
           : [],
 
       appointments:
-        Array.isArray(parsed.appointments)
+        Array.isArray(
+          parsed.appointments
+        )
           ? parsed.appointments.map(
               (appointment: any) => ({
                 organization:
-                  typeof appointment?.organization ===
-                  "string"
-                    ? appointment.organization
-                    : "",
+                  cleanString(
+                    appointment?.organization
+                  ),
 
                 appointmentDate:
-                  typeof appointment?.appointmentDate ===
-                  "string"
-                    ? appointment.appointmentDate
-                    : "",
+                  cleanString(
+                    appointment?.appointmentDate
+                  ),
 
                 description:
-                  typeof appointment?.description ===
-                  "string"
-                    ? appointment.description
-                    : "",
+                  cleanString(
+                    appointment?.description
+                  ),
 
                 officialUrl:
-                  typeof appointment?.officialUrl ===
-                  "string"
-                    ? appointment.officialUrl
-                    : "",
+                  cleanString(
+                    appointment?.officialUrl
+                  ),
               })
             )
           : [],
 
       requiredDocuments:
-        Array.isArray(parsed.requiredDocuments)
-          ? parsed.requiredDocuments.filter(
-              (item): item is string =>
-                typeof item === "string"
-            )
-          : [],
+        cleanStringArray(
+          parsed.requiredDocuments
+        ),
 
       consequences:
-        typeof parsed.consequences === "string"
-          ? parsed.consequences
-          : "",
+        cleanString(
+          parsed.consequences
+        ),
 
       importance:
-        parsed.importance === "high" ||
-        parsed.importance === "medium" ||
-        parsed.importance === "low"
-          ? parsed.importance
-          : "medium",
+        cleanImportance(
+          parsed.importance
+        ),
 
       replyNeeded:
-        Boolean(parsed.replyNeeded),
+        Boolean(
+          parsed.replyNeeded
+        ),
 
       appointmentNeeded:
-        Boolean(parsed.appointmentNeeded),
+        Boolean(
+          parsed.appointmentNeeded
+        ),
 
       officialUrl:
-        typeof parsed.officialUrl === "string"
-          ? parsed.officialUrl
-          : "",
+        cleanString(
+          parsed.officialUrl
+        ),
 
       explanation:
-        typeof parsed.explanation === "string"
-          ? parsed.explanation
-          : "",
+        cleanString(
+          parsed.explanation
+        ),
     };
 
     return NextResponse.json({
@@ -514,10 +558,16 @@ Do not invent missing information.
       error?.error?.message ||
       "";
 
+    const lowerMessage =
+      message.toLowerCase();
+
     if (
-      message
-        .toLowerCase()
-        .includes("rate limit")
+      lowerMessage.includes(
+        "rate limit"
+      ) ||
+      lowerMessage.includes(
+        "too many requests"
+      )
     ) {
       return NextResponse.json(
         {
@@ -529,15 +579,15 @@ Do not invent missing information.
     }
 
     if (
-      message
-        .toLowerCase()
-        .includes("authentication") ||
-      message
-        .toLowerCase()
-        .includes("api key") ||
-      message
-        .toLowerCase()
-        .includes("unauthorized")
+      lowerMessage.includes(
+        "authentication"
+      ) ||
+      lowerMessage.includes(
+        "api key"
+      ) ||
+      lowerMessage.includes(
+        "unauthorized"
+      )
     ) {
       return NextResponse.json(
         {

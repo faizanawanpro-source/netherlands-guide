@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -77,6 +78,9 @@ export default function AdministrationPage() {
 
   const [deadlineMessage, setDeadlineMessage] =
     useState("");
+
+  const [deletingDocumentId, setDeletingDocumentId] =
+    useState<string | null>(null);
 
   useEffect(() => {
     loadAdministration();
@@ -196,6 +200,114 @@ export default function AdministrationPage() {
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function deleteDocument(
+    documentId: string
+  ) {
+    const documentToDelete =
+      documents.find(
+        (item) => item.id === documentId
+      );
+
+    if (!documentToDelete) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete this saved letter?\n\n${
+        documentToDelete.subject ||
+        documentToDelete.document_type ||
+        "Saved document"
+      }\n\nThis will remove the saved document from your administration.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingDocumentId(documentId);
+      setError("");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        setError(
+          "Your session could not be found. Please sign in again."
+        );
+        return;
+      }
+
+      const {
+        error: deleteError,
+      } = await supabase
+        .from("documents")
+        .delete()
+        .eq("id", documentId)
+        .eq(
+          "user_id",
+          session.user.id
+        );
+
+      if (deleteError) {
+        console.error(
+          "Document delete error:",
+          deleteError
+        );
+
+        setError(
+          "We could not delete this letter. Please try again."
+        );
+
+        return;
+      }
+
+      setDocuments(
+        (current) =>
+          current.filter(
+            (document) =>
+              document.id !== documentId
+          )
+      );
+
+      setDeadlines(
+        (current) =>
+          current.filter(
+            (deadline) =>
+              true
+          )
+      );
+
+      setPayments(
+        (current) =>
+          current.filter(
+            (payment) =>
+              true
+          )
+      );
+
+      setAppointments(
+        (current) =>
+          current.filter(
+            (appointment) =>
+              true
+          )
+      );
+    } catch (err) {
+      console.error(
+        "Document deletion error:",
+        err
+      );
+
+      setError(
+        "Something went wrong while deleting this letter."
+      );
+    } finally {
+      setDeletingDocumentId(null);
     }
   }
 
@@ -637,8 +749,6 @@ export default function AdministrationPage() {
         !item.completed
     );
 
-  // Only deadlines with an actual date can be
-  // considered "upcoming within 7 days".
   const urgentDeadlines =
     activeDeadlines.filter(
       (item) => {
@@ -668,19 +778,19 @@ export default function AdministrationPage() {
       {/* Header */}
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
-          <a
+          <Link
             href="/dashboard"
             className="text-xl font-bold tracking-tight text-slate-900"
           >
             🇳🇱 Netherlands Guide
-          </a>
+          </Link>
 
-          <a
+          <Link
             href="/scanner"
             className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
           >
             🤖 Scan a letter
-          </a>
+          </Link>
         </div>
       </header>
 
@@ -1267,12 +1377,12 @@ export default function AdministrationPage() {
                     Your scanned letters will appear here.
                   </p>
 
-                  <a
+                  <Link
                     href="/scanner"
                     className="mt-5 inline-flex rounded-xl bg-purple-600 px-5 py-3 font-semibold text-white hover:bg-purple-700"
                   >
                     Scan your first letter
-                  </a>
+                  </Link>
                 </div>
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
@@ -1316,21 +1426,51 @@ export default function AdministrationPage() {
                           </p>
                         )}
 
-                        <div className="mt-5 flex items-center justify-between">
-                          <span className="text-xs text-slate-400">
-                            Scanned{" "}
-                            {formatDate(
-                              document.created_at
-                            )}
-                          </span>
-
-                          {document.importance && (
-                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                              {
-                                document.importance
-                              }
+                        <div className="mt-5 flex flex-col gap-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-slate-400">
+                              Scanned{" "}
+                              {formatDate(
+                                document.created_at
+                              )}
                             </span>
-                          )}
+
+                            {document.importance && (
+                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                                {
+                                  document.importance
+                                }
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <Link
+                              href={`/administration/${document.id}`}
+                              className="rounded-xl bg-slate-900 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
+                            >
+                              👁️ Open letter
+                            </Link>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                deleteDocument(
+                                  document.id
+                                )
+                              }
+                              disabled={
+                                deletingDocumentId ===
+                                document.id
+                              }
+                              className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {deletingDocumentId ===
+                              document.id
+                                ? "Deleting..."
+                                : "🗑️ Delete"}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )
@@ -1356,12 +1496,12 @@ export default function AdministrationPage() {
                   </p>
                 </div>
 
-                <a
+                <Link
                   href="/scanner"
                   className="rounded-xl bg-white px-6 py-3 text-center font-bold text-purple-700 shadow-sm hover:bg-purple-50"
                 >
                   🤖 Scan a letter
-                </a>
+                </Link>
               </div>
             </section>
           </>

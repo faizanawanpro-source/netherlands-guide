@@ -476,12 +476,23 @@ export default function DashboardPage() {
 
           </Link>
 
-          <Link
-            href="/onboarding"
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-          >
-            {t.edit}
-          </Link>
+          <div className="flex items-center gap-2">
+
+            <Link
+              href="/administration"
+              className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-100"
+            >
+              📚 Administration
+            </Link>
+
+            <Link
+              href="/onboarding"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              {t.edit}
+            </Link>
+
+          </div>
 
         </div>
 
@@ -500,8 +511,6 @@ export default function DashboardPage() {
         {/* ================================================== */}
 
         <section className="relative overflow-hidden rounded-[2rem] bg-slate-950 p-7 text-white shadow-xl sm:p-10">
-
-          {/* subtle brand glow */}
 
           <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-blue-600/20 blur-3xl" />
 
@@ -651,8 +660,6 @@ export default function DashboardPage() {
                   href={tool.href}
                   className={`group relative overflow-hidden rounded-[1.75rem] bg-gradient-to-br ${tool.color} p-6 text-white shadow-md transition duration-300 hover:-translate-y-1 hover:shadow-xl`}
                 >
-
-                  {/* subtle hover glow */}
 
                   <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl transition group-hover:bg-white/15" />
 
@@ -1081,4 +1088,3 @@ export default function DashboardPage() {
     </main>
   );
 }
-
