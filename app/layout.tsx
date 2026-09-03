@@ -11,7 +11,6 @@ export const metadata: Metadata = {
   },
   description:
     "Your personalised guide to life in the Netherlands. Get help with housing, documents, healthcare, work, money, transport and more.",
-
   keywords: [
     "Netherlands",
     "Netherway",
@@ -25,15 +24,8 @@ export const metadata: Metadata = {
     "housing Netherlands",
     "work Netherlands",
   ],
-
-  authors: [
-    {
-      name: "Netherway",
-    },
-  ],
-
+  authors: [{ name: "Netherway" }],
   applicationName: "Netherway",
-
   icons: {
     icon: "/favicon.ico",
   },
@@ -47,13 +39,12 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning>
-        {/* Main page content */}
         {children}
 
-        {/* Language translation */}
+        {/* Hidden Google Translate engine */}
         <GoogleTranslate />
 
-        {/* AI voice assistant */}
+        {/* Global AI Voice Assistant */}
         <VoiceAssistant />
       </body>
     </html>

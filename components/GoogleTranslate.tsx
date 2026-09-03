@@ -9,16 +9,194 @@ declare global {
   }
 }
 
+const languageMap: Record<string, string> = {
+  English: "en",
+  Nederlands: "nl",
+  اردو: "ur",
+  हिन्दी: "hi",
+  ਪੰਜਾਬੀ: "pa",
+  العربية: "ar",
+  Türkçe: "tr",
+  中文: "zh-CN",
+  Українська: "uk",
+  فارسی: "fa",
+  پښتو: "ps",
+  Français: "fr",
+  Español: "es",
+  Deutsch: "de",
+  Polski: "pl",
+  Português: "pt",
+  Italiano: "it",
+  Русский: "ru",
+  বাংলা: "bn",
+  Română: "ro",
+  Ελληνικά: "el",
+};
+
+function getSelectedLanguage() {
+  try {
+    const directLanguage = localStorage.getItem(
+      "netherlandsGuideAppLanguage"
+    );
+
+    if (directLanguage) {
+      return directLanguage;
+    }
+
+    const savedProfile = localStorage.getItem(
+      "netherlandsGuideProfile"
+    );
+
+    if (savedProfile) {
+      const profile = JSON.parse(savedProfile);
+
+      if (profile?.appLanguage) {
+        return profile.appLanguage;
+      }
+    }
+  } catch (error) {
+    console.warn(
+      "Could not read app language:",
+      error
+    );
+  }
+
+  return "English";
+}
+
+function getGoogleLanguage(language: string) {
+  return languageMap[language] || "en";
+}
+
+function setGoogleTranslateLanguage(language: string) {
+  const googleLanguage =
+    getGoogleLanguage(language);
+
+  /*
+   * Google Translate uses the googtrans cookie
+   * to remember the selected translation.
+   *
+   * /en/ur means:
+   * translate from English to Urdu.
+   */
+
+  if (googleLanguage === "en") {
+    document.cookie =
+      "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+
+    document.cookie =
+      "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=" +
+      window.location.hostname +
+      ";";
+
+    return;
+  }
+
+  const cookieValue = `/en/${googleLanguage}`;
+
+  document.cookie =
+    `googtrans=${cookieValue}; path=/;`;
+
+  /*
+   * Google Translate also sometimes checks
+   * the domain cookie.
+   */
+
+  document.cookie =
+    `googtrans=${cookieValue}; path=/; domain=${window.location.hostname};`;
+
+  /*
+   * If the Google Translate select exists,
+   * change it directly.
+   */
+
+  const select =
+    document.querySelector<HTMLSelectElement>(
+      ".goog-te-combo"
+    );
+
+  if (select) {
+    select.value = googleLanguage;
+
+    select.dispatchEvent(
+      new Event("change", {
+        bubbles: true,
+      })
+    );
+  }
+}
+
 export default function GoogleTranslate() {
   useEffect(() => {
     let cancelled = false;
 
-    const initializeTranslate = () => {
-      if (cancelled) return;
+    /*
+     * ============================================================
+     * HIDE GOOGLE TRANSLATE UI
+     * ============================================================
+     *
+     * Google Translate still runs, but the user never sees
+     * the Google Translate dropdown/button.
+     */
 
-      const element = document.getElementById(
-        "google_translate_element"
-      );
+    const style = document.createElement("style");
+
+    style.setAttribute(
+      "data-netherway-google-translate",
+      "true"
+    );
+
+    style.textContent = `
+      #google_translate_element {
+        position: fixed !important;
+        width: 1px !important;
+        height: 1px !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        z-index: -1 !important;
+        left: -9999px !important;
+        bottom: -9999px !important;
+      }
+
+      .goog-te-banner-frame {
+        display: none !important;
+      }
+
+      body {
+        top: 0 !important;
+      }
+
+      .goog-te-gadget {
+        font-size: 0 !important;
+      }
+
+      .goog-te-gadget span {
+        display: none !important;
+      }
+
+      .goog-te-menu-value {
+        display: none !important;
+      }
+    `;
+
+    document.head.appendChild(style);
+
+    /*
+     * ============================================================
+     * INITIALIZE GOOGLE TRANSLATE
+     * ============================================================
+     */
+
+    const initializeTranslate = () => {
+      if (cancelled) {
+        return false;
+      }
+
+      const element =
+        document.getElementById(
+          "google_translate_element"
+        );
 
       if (
         !element ||
@@ -27,86 +205,165 @@ export default function GoogleTranslate() {
         return false;
       }
 
-      // Don't create the widget twice
-      if (element.children.length > 0) {
-        return true;
+      /*
+       * Don't create the widget twice.
+       */
+
+      if (element.children.length === 0) {
+        try {
+          new window.google.translate.TranslateElement(
+            {
+              pageLanguage: "en",
+
+              includedLanguages:
+                "en,nl,de,fr,es,it,pt,pl,ar,tr,ur,hi,pa,zh-CN,uk,fa,ps,ro,el,bn,ru",
+
+              autoDisplay: false,
+            },
+
+            "google_translate_element"
+          );
+        } catch (error) {
+          console.warn(
+            "Google Translate could not initialize:",
+            error
+          );
+
+          return false;
+        }
       }
 
-      try {
-        new window.google.translate.TranslateElement(
-          {
-            pageLanguage: "en",
-            includedLanguages:
-              "en,nl,de,fr,es,it,pt,pl,ar,tr,ur,hi",
-            layout:
-              window.google.translate.TranslateElement
-                .InlineLayout.SIMPLE,
-            autoDisplay: false,
-          },
-          "google_translate_element"
-        );
+      /*
+       * Give Google a moment to create its
+       * internal select element.
+       */
 
-        return true;
-      } catch (error) {
-        console.warn(
-          "Google Translate could not initialize:",
-          error
-        );
+      window.setTimeout(() => {
+        if (!cancelled) {
+          setGoogleTranslateLanguage(
+            getSelectedLanguage()
+          );
+        }
+      }, 300);
 
-        return false;
-      }
+      return true;
     };
 
     window.googleTranslateElementInit =
       initializeTranslate;
 
-    // Google Translate may already be loaded
-    if (initializeTranslate()) {
-      return () => {
-        cancelled = true;
-      };
-    }
+    /*
+     * ============================================================
+     * LOAD GOOGLE TRANSLATE SCRIPT
+     * ============================================================
+     */
 
-    // Check whether the script already exists
-    let script =
-      document.querySelector<HTMLScriptElement>(
-        'script[data-google-translate="true"]'
-      );
+    if (!initializeTranslate()) {
+      let script =
+        document.querySelector<HTMLScriptElement>(
+          'script[data-google-translate="true"]'
+        );
 
-    // Create it if it doesn't exist
-    if (!script) {
-      script = document.createElement("script");
+      if (!script) {
+        script = document.createElement("script");
 
-      script.src =
-        "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
+        script.src =
+          "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
 
-      script.async = true;
-      script.defer = true;
+        script.async = true;
+        script.defer = true;
 
-      script.setAttribute(
-        "data-google-translate",
-        "true"
-      );
+        script.setAttribute(
+          "data-google-translate",
+          "true"
+        );
 
-      document.body.appendChild(script);
-    }
-
-    // Wait for Google to become available
-    const interval = window.setInterval(() => {
-      if (initializeTranslate()) {
-        window.clearInterval(interval);
+        document.body.appendChild(script);
       }
-    }, 500);
 
-    // Stop checking after 15 seconds
-    const timeout = window.setTimeout(() => {
-      window.clearInterval(interval);
-    }, 15000);
+      /*
+       * Wait for Google Translate to become available.
+       */
+
+      const interval =
+        window.setInterval(() => {
+          if (initializeTranslate()) {
+            window.clearInterval(interval);
+          }
+        }, 500);
+
+      /*
+       * Stop checking after 15 seconds.
+       */
+
+      window.setTimeout(() => {
+        window.clearInterval(interval);
+      }, 15000);
+    }
+
+    /*
+     * ============================================================
+     * LISTEN FOR APP LANGUAGE CHANGES
+     * ============================================================
+     */
+
+    const handleLanguageChange = (
+      event: Event
+    ) => {
+      const customEvent =
+        event as CustomEvent<{
+          language?: string;
+        }>;
+
+      const selectedLanguage =
+        customEvent.detail?.language ||
+        getSelectedLanguage();
+
+      localStorage.setItem(
+        "netherlandsGuideAppLanguage",
+        selectedLanguage
+      );
+
+      /*
+       * If Google is already ready, switch immediately.
+       */
+
+      setGoogleTranslateLanguage(
+        selectedLanguage
+      );
+
+      /*
+       * Google Translate sometimes needs a
+       * small delay after initialization.
+       */
+
+      window.setTimeout(() => {
+        if (!cancelled) {
+          setGoogleTranslateLanguage(
+            selectedLanguage
+          );
+        }
+      }, 500);
+    };
+
+    window.addEventListener(
+      "netherlandsGuideLanguageChange",
+      handleLanguageChange
+    );
+
+    /*
+     * ============================================================
+     * CLEANUP
+     * ============================================================
+     */
 
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
-      window.clearTimeout(timeout);
+
+      window.removeEventListener(
+        "netherlandsGuideLanguageChange",
+        handleLanguageChange
+      );
 
       if (
         window.googleTranslateElementInit
@@ -114,22 +371,21 @@ export default function GoogleTranslate() {
         window.googleTranslateElementInit =
           undefined;
       }
+
+      style.remove();
     };
   }, []);
+
+  /*
+   * IMPORTANT:
+   * This element must exist so Google Translate
+   * can initialize, but it is intentionally invisible.
+   */
 
   return (
     <div
       id="google_translate_element"
-      className="
-        fixed
-        bottom-5
-        left-5
-        z-[9998]
-        rounded-xl
-        bg-white
-        p-2
-        shadow-lg
-      "
+      aria-hidden="true"
     />
   );
 }

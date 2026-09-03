@@ -20,10 +20,7 @@ function normalizeReference(value: unknown) {
 }
 
 function parseAmount(value: unknown) {
-  if (
-    value === null ||
-    value === undefined
-  ) {
+  if (value === null || value === undefined) {
     return null;
   }
 
@@ -51,43 +48,30 @@ function parseAmount(value: unknown) {
     normalized.includes(",") &&
     normalized.includes(".")
   ) {
-    const lastComma =
-      normalized.lastIndexOf(",");
-
-    const lastDot =
-      normalized.lastIndexOf(".");
+    const lastComma = normalized.lastIndexOf(",");
+    const lastDot = normalized.lastIndexOf(".");
 
     if (lastComma > lastDot) {
       normalized = normalized
         .replace(/\./g, "")
         .replace(",", ".");
     } else {
-      normalized =
-        normalized.replace(/,/g, "");
+      normalized = normalized.replace(/,/g, "");
     }
-  } else if (
-    normalized.includes(",")
-  ) {
-    normalized =
-      normalized.replace(",", ".");
+  } else if (normalized.includes(",")) {
+    normalized = normalized.replace(",", ".");
   }
 
-  const parsed =
-    Number(normalized);
+  const parsed = Number(normalized);
 
-  return Number.isFinite(parsed)
-    ? parsed
-    : null;
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function tokenize(value: unknown) {
   return new Set(
     normalizeText(value)
       .split(/\s+/)
-      .filter(
-        (token) =>
-          token.length >= 2
-      )
+      .filter((token) => token.length >= 2)
   );
 }
 
@@ -98,10 +82,7 @@ function textSimilarity(
   const a = tokenize(first);
   const b = tokenize(second);
 
-  if (
-    a.size === 0 ||
-    b.size === 0
-  ) {
+  if (a.size === 0 || b.size === 0) {
     return 0;
   }
 
@@ -113,11 +94,7 @@ function textSimilarity(
     }
   }
 
-  const union =
-    new Set([
-      ...a,
-      ...b,
-    ]).size;
+  const union = new Set([...a, ...b]).size;
 
   if (union === 0) {
     return 0;
@@ -126,20 +103,12 @@ function textSimilarity(
   return shared / union;
 }
 
-export async function POST(
-  request: Request
-) {
+export async function POST(request: Request) {
   try {
     const authorization =
-      request.headers.get(
-        "authorization"
-      );
+      request.headers.get("authorization");
 
-    if (
-      !authorization?.startsWith(
-        "Bearer "
-      )
-    ) {
+    if (!authorization?.startsWith("Bearer ")) {
       return NextResponse.json(
         {
           success: false,
@@ -150,18 +119,15 @@ export async function POST(
       );
     }
 
-    const accessToken =
-      authorization
-        .replace("Bearer ", "")
-        .trim();
+    const accessToken = authorization
+      .replace("Bearer ", "")
+      .trim();
 
     const supabaseUrl =
-      process.env
-        .NEXT_PUBLIC_SUPABASE_URL;
+      process.env.NEXT_PUBLIC_SUPABASE_URL;
 
     const supabasePublishableKey =
-      process.env
-        .NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
     if (
       !supabaseUrl ||
@@ -177,32 +143,25 @@ export async function POST(
       );
     }
 
-    const supabase =
-      createClient(
-        supabaseUrl,
-        supabasePublishableKey,
-        {
-          global: {
-            headers: {
-              Authorization:
-                `Bearer ${accessToken}`,
-            },
+    const supabase = createClient(
+      supabaseUrl,
+      supabasePublishableKey,
+      {
+        global: {
+          headers: {
+            Authorization:
+              `Bearer ${accessToken}`,
           },
-        }
-      );
+        },
+      }
+    );
 
     const {
-      data: {
-        user,
-      },
+      data: { user },
       error: userError,
-    } =
-      await supabase.auth.getUser();
+    } = await supabase.auth.getUser();
 
-    if (
-      userError ||
-      !user
-    ) {
+    if (userError || !user) {
       console.error(
         "Supabase user verification error:",
         userError
@@ -218,8 +177,7 @@ export async function POST(
       );
     }
 
-    const body =
-      await request.json();
+    const body = await request.json();
 
     const {
       documentType,
@@ -236,141 +194,194 @@ export async function POST(
       deadlines,
       payments,
       appointments,
-      forceSave,
     } = body;
 
-    const userId =
-      user.id;
+    const userId = user.id;
 
     /*
      * --------------------------------------------------
      * DUPLICATE DETECTION
      * --------------------------------------------------
      *
-     * Skip this check when the user explicitly chooses
-     * "Save anyway".
+     * Duplicate protection is ALWAYS enabled.
+     *
+     * The same letter must not be saved twice.
      */
 
-    if (!forceSave) {
-      const {
-        data: existingDocuments,
-        error:
-          existingDocumentsError,
-      } =
-        await supabase
-          .from("documents")
-          .select(
-            "id, document_type, sender, subject, summary, created_at"
-          )
-          .eq(
-            "user_id",
-            userId
-          )
-          .order(
-            "created_at",
-            {
-              ascending: false,
-            }
-          )
-          .limit(100);
+    const {
+      data: existingDocuments,
+      error: existingDocumentsError,
+    } = await supabase
+      .from("documents")
+      .select(
+        "id, document_type, sender, subject, summary, explanation, consequences, created_at"
+      )
+      .eq("user_id", userId)
+      .order("created_at", {
+        ascending: false,
+      })
+      .limit(100);
 
-      if (
+    if (existingDocumentsError) {
+      /*
+       * Duplicate checking is allowed to fail
+       * without blocking a normal save.
+       */
+
+      console.error(
+        "Duplicate document lookup error:",
         existingDocumentsError
-      ) {
-        /*
-         * Duplicate checking is allowed to fail
-         * without blocking a normal save.
-         */
-        console.error(
-          "Duplicate document lookup error:",
-          existingDocumentsError
+      );
+    } else if (
+      existingDocuments &&
+      existingDocuments.length > 0
+    ) {
+      const documentIds =
+        existingDocuments.map(
+          (item) => item.id
         );
-      } else if (
-        existingDocuments &&
-        existingDocuments.length > 0
-      ) {
-        const documentIds =
-          existingDocuments.map(
-            (item) => item.id
-          );
 
-        const {
-          data: existingPayments,
-          error:
-            existingPaymentsError,
-        } =
-          await supabase
-            .from("payments")
-            .select(
-              "id, document_id, amount, currency, recipient, payment_reference"
-            )
-            .eq(
-              "user_id",
-              userId
-            )
-            .in(
-              "document_id",
-              documentIds
-            );
+      const {
+        data: existingPayments,
+        error: existingPaymentsError,
+      } = await supabase
+        .from("payments")
+        .select(
+          "id, document_id, amount, currency, recipient, payment_reference, due_date"
+        )
+        .eq("user_id", userId)
+        .in(
+          "document_id",
+          documentIds
+        );
 
-        if (
+      if (existingPaymentsError) {
+        console.error(
+          "Duplicate payment lookup error:",
           existingPaymentsError
-        ) {
-          console.error(
-            "Duplicate payment lookup error:",
-            existingPaymentsError
+        );
+      }
+
+      const newPayments =
+        Array.isArray(payments)
+          ? payments
+          : [];
+
+      let duplicateDocument:
+        any | null = null;
+
+      let duplicateReason = "";
+
+      /*
+       * --------------------------------------------------
+       * 1. PAYMENT REFERENCE
+       * --------------------------------------------------
+       *
+       * Strongest payment-based duplicate signal.
+       */
+
+      for (
+        const newPayment of newPayments
+      ) {
+        const newReference =
+          normalizeReference(
+            newPayment?.paymentReference
           );
+
+        if (!newReference) {
+          continue;
         }
 
-        const newPayments =
-          Array.isArray(
-            payments
-          )
-            ? payments
-            : [];
+        const matchingPayment =
+          (
+            existingPayments || []
+          ).find(
+            (existingPayment) =>
+              normalizeReference(
+                existingPayment?.payment_reference
+              ) === newReference
+          );
 
-        let duplicateDocument:
-          | any
-          | null = null;
+        if (matchingPayment) {
+          duplicateDocument =
+            existingDocuments.find(
+              (document) =>
+                document.id ===
+                matchingPayment.document_id
+            );
 
-        let duplicateReason =
-          "";
+          if (duplicateDocument) {
+            duplicateReason =
+              "matching payment reference";
+            break;
+          }
+        }
+      }
 
-        /*
-         * 1. PAYMENT REFERENCE
-         *
-         * This is the strongest duplicate signal.
-         */
+      /*
+       * --------------------------------------------------
+       * 2. RECIPIENT + AMOUNT
+       * --------------------------------------------------
+       *
+       * Handles cases where the payment reference
+       * was read differently by the AI.
+       */
 
+      if (!duplicateDocument) {
         for (
           const newPayment of newPayments
         ) {
-          const newReference =
-            normalizeReference(
-              newPayment?.paymentReference
+          const newRecipient =
+            normalizeText(
+              newPayment?.recipient
             );
 
-          if (!newReference) {
+          const newAmount =
+            parseAmount(
+              newPayment?.amount
+            );
+
+          if (
+            !newRecipient ||
+            newAmount === null
+          ) {
             continue;
           }
 
           const matchingPayment =
             (
-              existingPayments ||
-              []
+              existingPayments || []
             ).find(
-              (
-                existingPayment
-              ) =>
-                normalizeReference(
-                  existingPayment?.payment_reference
-                ) ===
-                newReference
+              (existingPayment) => {
+                const existingRecipient =
+                  normalizeText(
+                    existingPayment?.recipient
+                  );
+
+                const existingAmount =
+                  parseAmount(
+                    existingPayment?.amount
+                  );
+
+                if (
+                  !existingRecipient ||
+                  existingAmount === null
+                ) {
+                  return false;
+                }
+
+                return (
+                  existingRecipient ===
+                    newRecipient &&
+                  Math.abs(
+                    existingAmount -
+                      newAmount
+                  ) < 0.01
+                );
+              }
             );
 
-          if (
-            matchingPayment
-          ) {
+          if (matchingPayment) {
             duplicateDocument =
               existingDocuments.find(
                 (document) =>
@@ -378,216 +389,350 @@ export async function POST(
                   matchingPayment.document_id
               );
 
-            if (
-              duplicateDocument
-            ) {
+            if (duplicateDocument) {
               duplicateReason =
-                "matching payment reference";
+                "matching payment recipient and amount";
+              break;
+            }
+          }
+        }
+      }
+
+      /*
+       * --------------------------------------------------
+       * 3. SENDER + SUBJECT
+       * --------------------------------------------------
+       *
+       * Strong document identity check.
+       */
+
+      if (!duplicateDocument) {
+        const newSender =
+          normalizeText(sender);
+
+        const newSubject =
+          normalizeText(subject);
+
+        if (
+          newSender &&
+          newSubject
+        ) {
+          for (
+            const existingDocument of existingDocuments
+          ) {
+            const existingSender =
+              normalizeText(
+                existingDocument.sender
+              );
+
+            const existingSubject =
+              normalizeText(
+                existingDocument.subject
+              );
+
+            if (
+              !existingSender ||
+              !existingSubject
+            ) {
+              continue;
+            }
+
+            const senderMatch =
+              textSimilarity(
+                newSender,
+                existingSender
+              );
+
+            const subjectMatch =
+              textSimilarity(
+                newSubject,
+                existingSubject
+              );
+
+            /*
+             * Slightly more tolerant than before.
+             *
+             * AI may extract the same sender/subject
+             * with small wording differences.
+             */
+
+            if (
+              senderMatch >= 0.75 &&
+              subjectMatch >= 0.70
+            ) {
+              duplicateDocument =
+                existingDocument;
+
+              duplicateReason =
+                "matching sender and subject";
 
               break;
             }
           }
         }
+      }
 
-        /*
-         * 2. RECIPIENT + AMOUNT
-         */
+      /*
+       * --------------------------------------------------
+       * 4. SENDER + SUMMARY
+       * --------------------------------------------------
+       *
+       * Extra protection when the subject is extracted
+       * differently on another scan.
+       */
+
+      if (!duplicateDocument) {
+        const newSender =
+          normalizeText(sender);
+
+        const newSummary =
+          normalizeText(summary);
 
         if (
-          !duplicateDocument
+          newSender &&
+          newSummary
         ) {
           for (
-            const newPayment of newPayments
+            const existingDocument of existingDocuments
           ) {
-            const newRecipient =
+            const existingSender =
               normalizeText(
-                newPayment?.recipient
+                existingDocument.sender
               );
 
-            const newAmount =
-              parseAmount(
-                newPayment?.amount
+            const existingSummary =
+              normalizeText(
+                existingDocument.summary
               );
 
             if (
-              !newRecipient ||
-              newAmount === null
+              !existingSender ||
+              !existingSummary
             ) {
               continue;
             }
 
-            const matchingPayment =
-              (
-                existingPayments ||
-                []
-              ).find(
-                (
-                  existingPayment
-                ) => {
-                  const existingRecipient =
-                    normalizeText(
-                      existingPayment?.recipient
-                    );
+            const senderMatch =
+              textSimilarity(
+                newSender,
+                existingSender
+              );
 
-                  const existingAmount =
-                    parseAmount(
-                      existingPayment?.amount
-                    );
-
-                  if (
-                    !existingRecipient ||
-                    existingAmount ===
-                      null
-                  ) {
-                    return false;
-                  }
-
-                  return (
-                    existingRecipient ===
-                      newRecipient &&
-                    Math.abs(
-                      existingAmount -
-                        newAmount
-                    ) < 0.01
-                  );
-                }
+            const summaryMatch =
+              textSimilarity(
+                newSummary,
+                existingSummary
               );
 
             if (
-              matchingPayment
+              senderMatch >= 0.80 &&
+              summaryMatch >= 0.82
             ) {
               duplicateDocument =
-                existingDocuments.find(
-                  (document) =>
-                    document.id ===
-                    matchingPayment.document_id
-                );
+                existingDocument;
 
-              if (
-                duplicateDocument
-              ) {
-                duplicateReason =
-                  "matching payment recipient and amount";
+              duplicateReason =
+                "matching sender and letter summary";
 
-                break;
-              }
+              break;
             }
           }
         }
+      }
 
-        /*
-         * 3. SENDER + SUBJECT
-         *
-         * Used for letters that don't contain
-         * payment information.
-         */
+      /*
+       * --------------------------------------------------
+       * 5. DOCUMENT TYPE + SENDER + SUBJECT
+       * --------------------------------------------------
+       *
+       * Additional protection for letters where
+       * the AI slightly changes the wording.
+       */
 
-        if (
-          !duplicateDocument
-        ) {
-          const newSender =
-            normalizeText(
-              sender
-            );
-
-          const newSubject =
-            normalizeText(
-              subject
-            );
-
-          if (
-            newSender &&
-            newSubject
-          ) {
-            for (
-              const existingDocument of existingDocuments
-            ) {
-              const existingSender =
-                normalizeText(
-                  existingDocument.sender
-                );
-
-              const existingSubject =
-                normalizeText(
-                  existingDocument.subject
-                );
-
-              if (
-                !existingSender ||
-                !existingSubject
-              ) {
-                continue;
-              }
-
-              const senderMatch =
-                textSimilarity(
-                  newSender,
-                  existingSender
-                );
-
-              const subjectMatch =
-                textSimilarity(
-                  newSubject,
-                  existingSubject
-                );
-
-              if (
-                senderMatch >= 0.8 &&
-                subjectMatch >= 0.8
-              ) {
-                duplicateDocument =
-                  existingDocument;
-
-                duplicateReason =
-                  "matching sender and subject";
-
-                break;
-              }
-            }
-          }
-        }
-
-        /*
-         * Return duplicate warning.
-         */
-
-        if (
-          duplicateDocument
-        ) {
-          return NextResponse.json(
-            {
-              success: false,
-              duplicate: true,
-
-              message:
-                "You may have already scanned this letter.",
-
-              duplicateReason,
-
-              existingDocument: {
-                id:
-                  duplicateDocument.id,
-
-                documentType:
-                  duplicateDocument.document_type ||
-                  "Official document",
-
-                sender:
-                  duplicateDocument.sender ||
-                  "",
-
-                subject:
-                  duplicateDocument.subject ||
-                  "",
-
-                createdAt:
-                  duplicateDocument.created_at ||
-                  null,
-              },
-            },
-            { status: 409 }
+      if (!duplicateDocument) {
+        const newDocumentType =
+          normalizeText(
+            documentType
           );
+
+        const newSender =
+          normalizeText(sender);
+
+        const newSubject =
+          normalizeText(subject);
+
+        if (
+          newDocumentType &&
+          newSender &&
+          newSubject
+        ) {
+          for (
+            const existingDocument of existingDocuments
+          ) {
+            const existingDocumentType =
+              normalizeText(
+                existingDocument.document_type
+              );
+
+            const existingSender =
+              normalizeText(
+                existingDocument.sender
+              );
+
+            const existingSubject =
+              normalizeText(
+                existingDocument.subject
+              );
+
+            if (
+              !existingDocumentType ||
+              !existingSender ||
+              !existingSubject
+            ) {
+              continue;
+            }
+
+            const documentTypeMatch =
+              textSimilarity(
+                newDocumentType,
+                existingDocumentType
+              );
+
+            const senderMatch =
+              textSimilarity(
+                newSender,
+                existingSender
+              );
+
+            const subjectMatch =
+              textSimilarity(
+                newSubject,
+                existingSubject
+              );
+
+            if (
+              documentTypeMatch >= 0.80 &&
+              senderMatch >= 0.80 &&
+              subjectMatch >= 0.65
+            ) {
+              duplicateDocument =
+                existingDocument;
+
+              duplicateReason =
+                "matching document type, sender and subject";
+
+              break;
+            }
+          }
         }
+      }
+
+      /*
+       * --------------------------------------------------
+       * 6. OVERALL LETTER CONTENT
+       * --------------------------------------------------
+       *
+       * Final protection for cases where Gemini extracts
+       * slightly different sender/subject values.
+       *
+       * We compare the actual explanation/summary content.
+       */
+
+      if (!duplicateDocument) {
+        const newContent = normalizeText(
+          [
+            documentType,
+            sender,
+            subject,
+            summary,
+            explanation,
+            consequences,
+          ]
+            .filter(Boolean)
+            .join(" ")
+        );
+
+        if (newContent) {
+          for (
+            const existingDocument of existingDocuments
+          ) {
+            const existingContent =
+              normalizeText(
+                [
+                  existingDocument.document_type,
+                  existingDocument.sender,
+                  existingDocument.subject,
+                  existingDocument.summary,
+                  existingDocument.explanation,
+                  existingDocument.consequences,
+                ]
+                  .filter(Boolean)
+                  .join(" ")
+              );
+
+            if (!existingContent) {
+              continue;
+            }
+
+            const contentMatch =
+              textSimilarity(
+                newContent,
+                existingContent
+              );
+
+            if (contentMatch >= 0.82) {
+              duplicateDocument =
+                existingDocument;
+
+              duplicateReason =
+                "very similar letter content";
+
+              break;
+            }
+          }
+        }
+      }
+
+      /*
+       * --------------------------------------------------
+       * RETURN DUPLICATE WARNING
+       * --------------------------------------------------
+       */
+
+      if (duplicateDocument) {
+        return NextResponse.json(
+          {
+            success: false,
+            duplicate: true,
+
+            message:
+              "You may have already scanned this letter.",
+
+            duplicateReason,
+
+            existingDocument: {
+              id:
+                duplicateDocument.id,
+
+              documentType:
+                duplicateDocument.document_type ||
+                "Official document",
+
+              sender:
+                duplicateDocument.sender ||
+                "",
+
+              subject:
+                duplicateDocument.subject ||
+                "",
+
+              createdAt:
+                duplicateDocument.created_at ||
+                null,
+            },
+          },
+          { status: 409 }
+        );
       }
     }
 
@@ -600,65 +745,48 @@ export async function POST(
     const {
       data: document,
       error: documentError,
-    } =
-      await supabase
-        .from("documents")
-        .insert({
-          user_id:
-            userId,
+    } = await supabase
+      .from("documents")
+      .insert({
+        user_id: userId,
 
-          document_type:
-            documentType ||
-            null,
+        document_type:
+          documentType || null,
 
-          sender:
-            sender ||
-            null,
+        sender:
+          sender || null,
 
-          subject:
-            subject ||
-            null,
+        subject:
+          subject || null,
 
-          summary:
-            summary ||
-            null,
+        summary:
+          summary || null,
 
-          explanation:
-            explanation ||
-            null,
+        explanation:
+          explanation || null,
 
-          consequences:
-            consequences ||
-            null,
+        consequences:
+          consequences || null,
 
-          importance:
-            importance ||
-            null,
+        importance:
+          importance || null,
 
-          reply_needed:
-            Boolean(
-              replyNeeded
-            ),
+        reply_needed:
+          Boolean(replyNeeded),
 
-          appointment_needed:
-            Boolean(
-              appointmentNeeded
-            ),
+        appointment_needed:
+          Boolean(appointmentNeeded),
 
-          official_url:
-            officialUrl ||
-            null,
+        official_url:
+          officialUrl || null,
 
-          confidence:
-            confidence ||
-            null,
-        })
-        .select()
-        .single();
+        confidence:
+          confidence || null,
+      })
+      .select()
+      .single();
 
-    if (
-      documentError
-    ) {
+    if (documentError) {
       console.error(
         "Document save error:",
         documentError
@@ -683,24 +811,18 @@ export async function POST(
      */
 
     if (
-      Array.isArray(
-        deadlines
-      ) &&
+      Array.isArray(deadlines) &&
       deadlines.length > 0
     ) {
       const deadlineRows =
         deadlines
           .filter(
-            (
-              deadline: any
-            ) =>
+            (deadline: any) =>
               deadline?.date ||
               deadline?.description
           )
           .map(
-            (
-              deadline: any
-            ) => {
+            (deadline: any) => {
               const hasExactDate =
                 Boolean(
                   deadline?.date
@@ -757,18 +879,14 @@ export async function POST(
         deadlineRows.length > 0
       ) {
         const {
-          error:
-            deadlineError,
-        } =
-          await supabase
-            .from("deadlines")
-            .insert(
-              deadlineRows
-            );
+          error: deadlineError,
+        } = await supabase
+          .from("deadlines")
+          .insert(
+            deadlineRows
+          );
 
-        if (
-          deadlineError
-        ) {
+        if (deadlineError) {
           console.error(
             "Deadline save error:",
             deadlineError
@@ -784,35 +902,37 @@ export async function POST(
      */
 
     if (
-      Array.isArray(
-        payments
-      ) &&
+      Array.isArray(payments) &&
       payments.length > 0
     ) {
       const paymentRows =
         payments
           .filter(
-            (
-              payment: any
-            ) =>
+            (payment: any) =>
               payment?.amount !==
                 undefined ||
               payment?.dueDate ||
               payment?.recipient
           )
           .map(
-            (
-              payment: any
-            ) => ({
+            (payment: any) => ({
               document_id:
                 document.id,
 
               user_id:
                 userId,
 
+              /*
+               * Convert:
+               * 149,70 -> 149.70
+               * 1.149,70 -> 1149.70
+               * 149.70 -> 149.70
+               */
+
               amount:
-                payment.amount ??
-                null,
+                parseAmount(
+                  payment.amount
+                ),
 
               currency:
                 payment.currency ||
@@ -839,18 +959,14 @@ export async function POST(
         paymentRows.length > 0
       ) {
         const {
-          error:
-            paymentError,
-        } =
-          await supabase
-            .from("payments")
-            .insert(
-              paymentRows
-            );
+          error: paymentError,
+        } = await supabase
+          .from("payments")
+          .insert(
+            paymentRows
+          );
 
-        if (
-          paymentError
-        ) {
+        if (paymentError) {
           console.error(
             "Payment save error:",
             paymentError
@@ -866,25 +982,19 @@ export async function POST(
      */
 
     if (
-      Array.isArray(
-        appointments
-      ) &&
+      Array.isArray(appointments) &&
       appointments.length > 0
     ) {
       const appointmentRows =
         appointments
           .filter(
-            (
-              appointment: any
-            ) =>
+            (appointment: any) =>
               appointment?.organization ||
               appointment?.appointmentDate ||
               appointment?.description
           )
           .map(
-            (
-              appointment: any
-            ) => ({
+            (appointment: any) => ({
               document_id:
                 document.id,
 
@@ -916,18 +1026,14 @@ export async function POST(
         appointmentRows.length > 0
       ) {
         const {
-          error:
-            appointmentError,
-        } =
-          await supabase
-            .from("appointments")
-            .insert(
-              appointmentRows
-            );
+          error: appointmentError,
+        } = await supabase
+          .from("appointments")
+          .insert(
+            appointmentRows
+          );
 
-        if (
-          appointmentError
-        ) {
+        if (appointmentError) {
           console.error(
             "Appointment save error:",
             appointmentError
@@ -945,7 +1051,6 @@ export async function POST(
       message:
         "Scan saved successfully",
     });
-
   } catch (error) {
     console.error(
       "Save scan error:",

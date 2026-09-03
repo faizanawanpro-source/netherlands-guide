@@ -80,19 +80,40 @@ export default function VoiceAssistant() {
 
   const websocketRef = useRef<WebSocket | null>(null);
   const microphoneStreamRef = useRef<MediaStream | null>(null);
-  const microphoneContextRef = useRef<AudioContext | null>(null);
+  const microphoneContextRef =
+    useRef<AudioContext | null>(null);
   const microphoneSourceRef =
     useRef<MediaStreamAudioSourceNode | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const processorRef =
+    useRef<ScriptProcessorNode | null>(null);
 
-  const outputContextRef = useRef<AudioContext | null>(null);
-  const nextAudioTimeRef = useRef(0);
-  const audioSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  const outputContextRef =
+    useRef<AudioContext | null>(null);
+  const nextAudioTimeRef =
+    useRef(0);
+  const audioSourcesRef =
+    useRef<AudioBufferSourceNode[]>([]);
 
-  const isNavigatingRef = useRef(false);
-  const microphoneStartedRef = useRef(false);
-  const greetingSentRef = useRef(false);
-  const lastNavigationTextRef = useRef("");
+  const isNavigatingRef =
+    useRef(false);
+  const microphoneStartedRef =
+    useRef(false);
+  const greetingSentRef =
+    useRef(false);
+  const lastNavigationTextRef =
+    useRef("");
+
+  // ============================================================
+  // CONNECTION CONTROL
+  // ============================================================
+
+  const connectionIdRef =
+    useRef(0);
+
+  const connectionTimeoutRef =
+    useRef<ReturnType<typeof setTimeout> | null>(
+      null
+    );
 
   // ============================================================
   // LOAD PROFILE
@@ -100,13 +121,21 @@ export default function VoiceAssistant() {
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("netherlandsGuideProfile");
+      const saved =
+        localStorage.getItem(
+          "netherlandsGuideProfile"
+        );
 
       if (saved) {
-        setProfile(JSON.parse(saved));
+        setProfile(
+          JSON.parse(saved)
+        );
       }
     } catch (error) {
-      console.error("Could not load profile:", error);
+      console.error(
+        "Could not load profile:",
+        error
+      );
     }
   }, []);
 
@@ -125,7 +154,9 @@ export default function VoiceAssistant() {
   // ============================================================
 
   function getProfileLanguage() {
-    const language = String(profile?.language || "English")
+    const language = String(
+      profile?.language || "English"
+    )
       .trim()
       .toLowerCase();
 
@@ -251,18 +282,34 @@ export default function VoiceAssistant() {
   // BASE64
   // ============================================================
 
-  function arrayBufferToBase64(buffer: ArrayBuffer) {
-    const bytes = new Uint8Array(buffer);
+  function arrayBufferToBase64(
+    buffer: ArrayBuffer
+  ) {
+    const bytes =
+      new Uint8Array(buffer);
+
     let binary = "";
-    const chunkSize = 0x8000;
 
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(
-        i,
-        Math.min(i + chunkSize, bytes.length)
+    const chunkSize =
+      0x8000;
+
+    for (
+      let i = 0;
+      i < bytes.length;
+      i += chunkSize
+    ) {
+      const chunk =
+        bytes.subarray(
+          i,
+          Math.min(
+            i + chunkSize,
+            bytes.length
+          )
+        );
+
+      binary += String.fromCharCode(
+        ...chunk
       );
-
-      binary += String.fromCharCode(...chunk);
     }
 
     return btoa(binary);
@@ -272,11 +319,27 @@ export default function VoiceAssistant() {
   // FLOAT -> PCM16
   // ============================================================
 
-  function floatTo16BitPCM(input: Float32Array) {
-    const output = new Int16Array(input.length);
+  function floatTo16BitPCM(
+    input: Float32Array
+  ) {
+    const output =
+      new Int16Array(
+        input.length
+      );
 
-    for (let i = 0; i < input.length; i++) {
-      const sample = Math.max(-1, Math.min(1, input[i]));
+    for (
+      let i = 0;
+      i < input.length;
+      i++
+    ) {
+      const sample =
+        Math.max(
+          -1,
+          Math.min(
+            1,
+            input[i]
+          )
+        );
 
       output[i] =
         sample < 0
@@ -295,40 +358,67 @@ export default function VoiceAssistant() {
     input: Float32Array,
     inputSampleRate: number
   ) {
-    if (inputSampleRate === 16000) {
+    if (
+      inputSampleRate ===
+      16000
+    ) {
       return input;
     }
 
-    const ratio = inputSampleRate / 16000;
-    const newLength = Math.round(input.length / ratio);
+    const ratio =
+      inputSampleRate /
+      16000;
 
-    const result = new Float32Array(newLength);
+    const newLength =
+      Math.round(
+        input.length /
+          ratio
+      );
+
+    const result =
+      new Float32Array(
+        newLength
+      );
 
     let offsetResult = 0;
     let offsetBuffer = 0;
 
-    while (offsetResult < result.length) {
-      const nextOffsetBuffer = Math.round(
-        (offsetResult + 1) * ratio
-      );
+    while (
+      offsetResult <
+      result.length
+    ) {
+      const nextOffsetBuffer =
+        Math.round(
+          (offsetResult + 1) *
+            ratio
+        );
 
       let accum = 0;
       let count = 0;
 
       for (
-        let i = offsetBuffer;
-        i < nextOffsetBuffer && i < input.length;
+        let i =
+          offsetBuffer;
+        i <
+          nextOffsetBuffer &&
+        i <
+          input.length;
         i++
       ) {
         accum += input[i];
         count++;
       }
 
-      result[offsetResult] =
-        count > 0 ? accum / count : 0;
+      result[
+        offsetResult
+      ] =
+        count > 0
+          ? accum / count
+          : 0;
 
       offsetResult++;
-      offsetBuffer = nextOffsetBuffer;
+      offsetBuffer =
+        nextOffsetBuffer;
     }
 
     return result;
@@ -338,12 +428,16 @@ export default function VoiceAssistant() {
   // SEND AUDIO
   // ============================================================
 
-  function sendAudioChunk(pcmBuffer: ArrayBuffer) {
-    const socket = websocketRef.current;
+  function sendAudioChunk(
+    pcmBuffer: ArrayBuffer
+  ) {
+    const socket =
+      websocketRef.current;
 
     if (
       !socket ||
-      socket.readyState !== WebSocket.OPEN
+      socket.readyState !==
+        WebSocket.OPEN
     ) {
       return;
     }
@@ -353,14 +447,21 @@ export default function VoiceAssistant() {
         JSON.stringify({
           realtimeInput: {
             audio: {
-              data: arrayBufferToBase64(pcmBuffer),
-              mimeType: "audio/pcm;rate=16000",
+              data:
+                arrayBufferToBase64(
+                  pcmBuffer
+                ),
+              mimeType:
+                "audio/pcm;rate=16000",
             },
           },
         })
       );
     } catch (error) {
-      console.error("Could not send audio:", error);
+      console.error(
+        "Could not send audio:",
+        error
+      );
     }
   }
 
@@ -369,14 +470,20 @@ export default function VoiceAssistant() {
   // ============================================================
 
   function stopAllAudio() {
-    audioSourcesRef.current.forEach((source) => {
-      try {
-        source.stop();
-      } catch {}
-    });
+    audioSourcesRef.current.forEach(
+      (source) => {
+        try {
+          source.stop();
+        } catch {}
+      }
+    );
 
-    audioSourcesRef.current = [];
-    nextAudioTimeRef.current = 0;
+    audioSourcesRef.current =
+      [];
+
+    nextAudioTimeRef.current =
+      0;
+
     setSpeaking(false);
   }
 
@@ -384,57 +491,101 @@ export default function VoiceAssistant() {
   // PLAY GEMINI AUDIO
   // ============================================================
 
-  async function playAudio(base64Audio: string) {
+  async function playAudio(
+    base64Audio: string
+  ) {
     try {
-      let context = outputContextRef.current;
+      let context =
+        outputContextRef.current;
 
       if (!context) {
-        context = new AudioContext({
-          sampleRate: 24000,
-        });
+        context =
+          new AudioContext({
+            sampleRate: 24000,
+          });
 
-        outputContextRef.current = context;
+        outputContextRef.current =
+          context;
       }
 
-      if (context.state === "suspended") {
+      if (
+        context.state ===
+        "suspended"
+      ) {
         await context.resume();
       }
 
-      const binary = atob(base64Audio);
-      const bytes = new Uint8Array(binary.length);
+      const binary =
+        atob(base64Audio);
 
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
+      const bytes =
+        new Uint8Array(
+          binary.length
+        );
+
+      for (
+        let i = 0;
+        i < binary.length;
+        i++
+      ) {
+        bytes[i] =
+          binary.charCodeAt(i);
       }
 
-      const pcm = new Int16Array(bytes.buffer);
+      const pcm =
+        new Int16Array(
+          bytes.buffer
+        );
 
-      const audioBuffer = context.createBuffer(
-        1,
-        pcm.length,
-        24000
+      const audioBuffer =
+        context.createBuffer(
+          1,
+          pcm.length,
+          24000
+        );
+
+      const channel =
+        audioBuffer.getChannelData(
+          0
+        );
+
+      for (
+        let i = 0;
+        i < pcm.length;
+        i++
+      ) {
+        channel[i] =
+          pcm[i] / 32768;
+      }
+
+      const source =
+        context.createBufferSource();
+
+      source.buffer =
+        audioBuffer;
+
+      source.connect(
+        context.destination
       );
 
-      const channel = audioBuffer.getChannelData(0);
+      const now =
+        context.currentTime;
 
-      for (let i = 0; i < pcm.length; i++) {
-        channel[i] = pcm[i] / 32768;
+      if (
+        nextAudioTimeRef.current <
+        now
+      ) {
+        nextAudioTimeRef.current =
+          now;
       }
 
-      const source = context.createBufferSource();
+      source.start(
+        nextAudioTimeRef.current
+      );
 
-      source.buffer = audioBuffer;
-      source.connect(context.destination);
-
-      const now = context.currentTime;
-
-      if (nextAudioTimeRef.current < now) {
-        nextAudioTimeRef.current = now;
-      }
-
-      source.start(nextAudioTimeRef.current);
-
-      audioSourcesRef.current.push(source);
+      audioSourcesRef.current.push(
+        source
+      );
 
       nextAudioTimeRef.current +=
         audioBuffer.duration;
@@ -444,15 +595,22 @@ export default function VoiceAssistant() {
       source.onended = () => {
         audioSourcesRef.current =
           audioSourcesRef.current.filter(
-            (item) => item !== source
+            (item) =>
+              item !== source
           );
 
-        if (audioSourcesRef.current.length === 0) {
+        if (
+          audioSourcesRef.current
+            .length === 0
+        ) {
           setSpeaking(false);
         }
       };
     } catch (error) {
-      console.error("Audio playback error:", error);
+      console.error(
+        "Audio playback error:",
+        error
+      );
     }
   }
 
@@ -460,7 +618,9 @@ export default function VoiceAssistant() {
   // MULTILINGUAL SMART NAVIGATION
   // ============================================================
 
-  function detectNavigationPath(text: string): string | null {
+  function detectNavigationPath(
+    text: string
+  ): string | null {
     if (!text) {
       return null;
     }
@@ -470,10 +630,11 @@ export default function VoiceAssistant() {
      * Urdu, Hindi, Chinese etc. can be matched reliably.
      */
 
-    const normalized = text
-      .toLowerCase()
-      .normalize("NFKC")
-      .trim();
+    const normalized =
+      text
+        .toLowerCase()
+        .normalize("NFKC")
+        .trim();
 
     if (!normalized) {
       return null;
@@ -592,8 +753,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      housingTerms.some((term) =>
-        normalized.includes(term)
+      housingTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/housing";
@@ -717,8 +879,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      transportTerms.some((term) =>
-        normalized.includes(term)
+      transportTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/transport";
@@ -778,8 +941,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      phoneTerms.some((term) =>
-        normalized.includes(term)
+      phoneTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/dutch-phone-number";
@@ -857,8 +1021,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      documentTerms.some((term) =>
-        normalized.includes(term)
+      documentTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/documents";
@@ -950,8 +1115,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      healthcareTerms.some((term) =>
-        normalized.includes(term)
+      healthcareTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/healthcare";
@@ -1041,8 +1207,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      moneyTerms.some((term) =>
-        normalized.includes(term)
+      moneyTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/money";
@@ -1121,8 +1288,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      workTerms.some((term) =>
-        normalized.includes(term)
+      workTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/work";
@@ -1216,8 +1384,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      studyTerms.some((term) =>
-        normalized.includes(term)
+      studyTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/study";
@@ -1284,8 +1453,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      municipalityTerms.some((term) =>
-        normalized.includes(term)
+      municipalityTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/municipality";
@@ -1367,8 +1537,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      vehicleTerms.some((term) =>
-        normalized.includes(term)
+      vehicleTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/vehicles";
@@ -1437,8 +1608,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      wasteTerms.some((term) =>
-        normalized.includes(term)
+      wasteTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/waste";
@@ -1501,8 +1673,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      exploreTerms.some((term) =>
-        normalized.includes(term)
+      exploreTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/explore";
@@ -1558,8 +1731,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      planDayTerms.some((term) =>
-        normalized.includes(term)
+      planDayTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/plan-day";
@@ -1620,8 +1794,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      tripTerms.some((term) =>
-        normalized.includes(term)
+      tripTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/trip-planner";
@@ -1681,8 +1856,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      scannerTerms.some((term) =>
-        normalized.includes(term)
+      scannerTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/scanner";
@@ -1753,8 +1929,9 @@ export default function VoiceAssistant() {
     ];
 
     if (
-      helpTerms.some((term) =>
-        normalized.includes(term)
+      helpTerms.some(
+        (term) =>
+          normalized.includes(term)
       )
     ) {
       return "/what-do-i-do";
@@ -1767,19 +1944,33 @@ export default function VoiceAssistant() {
   // NAVIGATION
   // ============================================================
 
-  function navigateToPage(path: string) {
-    if (!ALLOWED_PATHS.has(path)) {
-      console.error("Blocked navigation:", path);
+  function navigateToPage(
+    path: string
+  ) {
+    if (
+      !ALLOWED_PATHS.has(path)
+    ) {
+      console.error(
+        "Blocked navigation:",
+        path
+      );
+
       return false;
     }
 
-    if (isNavigatingRef.current) {
+    if (
+      isNavigatingRef.current
+    ) {
       return false;
     }
 
-    isNavigatingRef.current = true;
+    isNavigatingRef.current =
+      true;
 
-    console.log("🧭 ACTUALLY NAVIGATING:", path);
+    console.log(
+      "🧭 ACTUALLY NAVIGATING:",
+      path
+    );
 
     stopAllAudio();
 
@@ -1791,12 +1982,15 @@ export default function VoiceAssistant() {
         error
       );
 
-      isNavigatingRef.current = false;
+      isNavigatingRef.current =
+        false;
+
       return false;
     }
 
     window.setTimeout(() => {
-      isNavigatingRef.current = false;
+      isNavigatingRef.current =
+        false;
     }, 1500);
 
     return true;
@@ -1806,17 +2000,23 @@ export default function VoiceAssistant() {
   // USER TRANSCRIPTION
   // ============================================================
 
-  function handleUserTranscription(text: string) {
+  function handleUserTranscription(
+    text: string
+  ) {
     if (!text) {
       return;
     }
 
-    console.log("👤 USER:", text);
+    console.log(
+      "👤 USER:",
+      text
+    );
 
-    const normalized = text
-      .toLowerCase()
-      .normalize("NFKC")
-      .trim();
+    const normalized =
+      text
+        .toLowerCase()
+        .normalize("NFKC")
+        .trim();
 
     if (
       normalized ===
@@ -1825,9 +2025,13 @@ export default function VoiceAssistant() {
       return;
     }
 
-    lastNavigationTextRef.current = normalized;
+    lastNavigationTextRef.current =
+      normalized;
 
-    const path = detectNavigationPath(normalized);
+    const path =
+      detectNavigationPath(
+        normalized
+      );
 
     if (!path) {
       return;
@@ -1838,7 +2042,8 @@ export default function VoiceAssistant() {
       {
         text,
         path,
-        language: getProfileLanguage(),
+        language:
+          getProfileLanguage(),
       }
     );
 
@@ -1855,11 +2060,13 @@ export default function VoiceAssistant() {
     path: string,
     success: boolean
   ) {
-    const socket = websocketRef.current;
+    const socket =
+      websocketRef.current;
 
     if (
       !socket ||
-      socket.readyState !== WebSocket.OPEN
+      socket.readyState !==
+        WebSocket.OPEN
     ) {
       return;
     }
@@ -1905,23 +2112,31 @@ export default function VoiceAssistant() {
   async function startMicrophoneProcessing(
     stream: MediaStream
   ) {
-    if (microphoneStartedRef.current) {
+    if (
+      microphoneStartedRef.current
+    ) {
       return;
     }
 
-    microphoneStartedRef.current = true;
+    microphoneStartedRef.current =
+      true;
 
     try {
-      const context = new AudioContext();
+      const context =
+        new AudioContext();
 
-      microphoneContextRef.current = context;
+      microphoneContextRef.current =
+        context;
 
       await context.resume();
 
       const source =
-        context.createMediaStreamSource(stream);
+        context.createMediaStreamSource(
+          stream
+        );
 
-      microphoneSourceRef.current = source;
+      microphoneSourceRef.current =
+        source;
 
       const processor =
         context.createScriptProcessor(
@@ -1930,34 +2145,46 @@ export default function VoiceAssistant() {
           1
         );
 
-      processorRef.current = processor;
+      processorRef.current =
+        processor;
 
-      processor.onaudioprocess = (event) => {
-        const input =
-          event.inputBuffer.getChannelData(0);
+      processor.onaudioprocess =
+        (event) => {
+          const input =
+            event.inputBuffer.getChannelData(
+              0
+            );
 
-        const downsampled =
-          downsampleTo16k(
-            input,
-            context.sampleRate
-          );
+          const downsampled =
+            downsampleTo16k(
+              input,
+              context.sampleRate
+            );
 
-        const pcm =
-          floatTo16BitPCM(downsampled);
+          const pcm =
+            floatTo16BitPCM(
+              downsampled
+            );
 
-        sendAudioChunk(pcm);
+          sendAudioChunk(pcm);
 
-        setListening(true);
-      };
+          setListening(true);
+        };
 
-      source.connect(processor);
-      processor.connect(context.destination);
+      source.connect(
+        processor
+      );
+
+      processor.connect(
+        context.destination
+      );
 
       console.log(
         "🎤 Microphone streaming started."
       );
     } catch (error) {
-      microphoneStartedRef.current = false;
+      microphoneStartedRef.current =
+        false;
 
       console.error(
         "Microphone processing error:",
@@ -1969,13 +2196,64 @@ export default function VoiceAssistant() {
   }
 
   // ============================================================
+  // CONNECTION TIMEOUT
+  // ============================================================
+
+  function clearConnectionTimeout() {
+    if (
+      connectionTimeoutRef.current
+    ) {
+      clearTimeout(
+        connectionTimeoutRef.current
+      );
+
+      connectionTimeoutRef.current =
+        null;
+    }
+  }
+
+  function startConnectionTimeout(
+    connectionId: number
+  ) {
+    clearConnectionTimeout();
+
+    connectionTimeoutRef.current =
+      setTimeout(() => {
+        if (
+          connectionIdRef.current !==
+          connectionId
+        ) {
+          return;
+        }
+
+        console.error(
+          "⏱️ Gemini connection timed out."
+        );
+
+        setError(
+          "The voice connection took too long. Please try again."
+        );
+
+        cleanup();
+
+        setConnecting(false);
+        setConnected(false);
+        setListening(false);
+        setSpeaking(false);
+      }, 15000);
+  }
+
+  // ============================================================
   // GEMINI MESSAGE
   // ============================================================
 
   async function handleGeminiMessage(
     data: GeminiMessage
   ) {
-    console.log("📩 Gemini:", data);
+    console.log(
+      "📩 Gemini:",
+      data
+    );
 
     // ----------------------------------------------------------
     // ERROR
@@ -2004,6 +2282,8 @@ export default function VoiceAssistant() {
         "✅ Gemini setup complete."
       );
 
+      clearConnectionTimeout();
+
       setConnected(true);
       setConnecting(false);
 
@@ -2029,15 +2309,19 @@ export default function VoiceAssistant() {
 
       // ONE GREETING ONLY
 
-      if (!greetingSentRef.current) {
-        greetingSentRef.current = true;
+      if (
+        !greetingSentRef.current
+      ) {
+        greetingSentRef.current =
+          true;
 
         const socket =
           websocketRef.current;
 
         if (
           socket &&
-          socket.readyState === WebSocket.OPEN
+          socket.readyState ===
+            WebSocket.OPEN
         ) {
           socket.send(
             JSON.stringify({
@@ -2087,7 +2371,8 @@ Do not switch to English unless the user specifically asks for English.
     // ----------------------------------------------------------
 
     if (
-      data.serverContent?.interrupted
+      data.serverContent
+        ?.interrupted
     ) {
       console.log(
         "🛑 Gemini interrupted."
@@ -2105,7 +2390,9 @@ Do not switch to English unless the user specifically asks for English.
         ?.modelTurn
         ?.parts || [];
 
-    for (const part of audioParts) {
+    for (
+      const part of audioParts
+    ) {
       const inlineData =
         part?.inlineData;
 
@@ -2131,7 +2418,9 @@ Do not switch to English unless the user specifically asks for English.
         ?.text;
 
     if (inputText) {
-      handleUserTranscription(inputText);
+      handleUserTranscription(
+        inputText
+      );
     }
 
     // ----------------------------------------------------------
@@ -2191,7 +2480,8 @@ Do not switch to English unless the user specifically asks for English.
 
         if (
           !id ||
-          typeof path !== "string"
+          typeof path !==
+            "string"
         ) {
           console.error(
             "Invalid navigation function call."
@@ -2250,7 +2540,9 @@ Do not switch to English unless the user specifically asks for English.
         const text =
           await event.data.text();
 
-        return JSON.parse(text);
+        return JSON.parse(
+          text
+        );
       }
 
       if (
@@ -2264,7 +2556,9 @@ Do not switch to English unless the user specifically asks for English.
             )
           );
 
-        return JSON.parse(text);
+        return JSON.parse(
+          text
+        );
       }
 
       if (
@@ -2303,12 +2597,28 @@ Do not switch to English unless the user specifically asks for English.
       return;
     }
 
+    const connectionId =
+      connectionIdRef.current +
+      1;
+
+    connectionIdRef.current =
+      connectionId;
+
     setError("");
     setConnecting(true);
 
-    microphoneStartedRef.current = false;
-    greetingSentRef.current = false;
-    lastNavigationTextRef.current = "";
+    microphoneStartedRef.current =
+      false;
+
+    greetingSentRef.current =
+      false;
+
+    lastNavigationTextRef.current =
+      "";
+
+    startConnectionTimeout(
+      connectionId
+    );
 
     try {
       // --------------------------------------------------------
@@ -2325,8 +2635,15 @@ Do not switch to English unless the user specifically asks for English.
         );
       }
 
-      const stream =
-        await navigator.mediaDevices.getUserMedia(
+      // --------------------------------------------------------
+      // MICROPHONE + TOKEN
+      //
+      // These two operations do not depend on each other,
+      // so start them at the same time.
+      // --------------------------------------------------------
+
+      const microphonePromise =
+        navigator.mediaDevices.getUserMedia(
           {
             audio: {
               echoCancellation: true,
@@ -2337,19 +2654,8 @@ Do not switch to English unless the user specifically asks for English.
           }
         );
 
-      microphoneStreamRef.current =
-        stream;
-
-      console.log(
-        "🎤 Microphone permission granted."
-      );
-
-      // --------------------------------------------------------
-      // TOKEN
-      // --------------------------------------------------------
-
-      const tokenResponse =
-        await fetch(
+      const tokenPromise =
+        fetch(
           "/api/realtime",
           {
             method: "POST",
@@ -2363,17 +2669,62 @@ Do not switch to English unless the user specifically asks for English.
           }
         );
 
+      const [
+        stream,
+        tokenResponse,
+      ] = await Promise.all([
+        microphonePromise,
+        tokenPromise,
+      ]);
+
+      // --------------------------------------------------------
+      // CONNECTION STILL VALID?
+      // --------------------------------------------------------
+
+      if (
+        connectionIdRef.current !==
+        connectionId
+      ) {
+        stream
+          .getTracks()
+          .forEach(
+            (track) =>
+              track.stop()
+          );
+
+        return;
+      }
+
+      // --------------------------------------------------------
+      // MICROPHONE
+      // --------------------------------------------------------
+
+      microphoneStreamRef.current =
+        stream;
+
+      console.log(
+        "🎤 Microphone permission granted."
+      );
+
+      // --------------------------------------------------------
+      // TOKEN
+      // --------------------------------------------------------
+
       const tokenData =
         await tokenResponse.json();
 
-      if (!tokenResponse.ok) {
+      if (
+        !tokenResponse.ok
+      ) {
         throw new Error(
           tokenData?.error ||
             "Could not create Gemini realtime token."
         );
       }
 
-      if (!tokenData?.token) {
+      if (
+        !tokenData?.token
+      ) {
         throw new Error(
           "Gemini realtime token was not returned."
         );
@@ -2386,6 +2737,13 @@ Do not switch to English unless the user specifically asks for English.
       // --------------------------------------------------------
       // WEBSOCKET
       // --------------------------------------------------------
+
+      if (
+        connectionIdRef.current !==
+        connectionId
+      ) {
+        return;
+      }
 
       const socketUrl =
         `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(
@@ -2409,6 +2767,14 @@ Do not switch to English unless the user specifically asks for English.
       // --------------------------------------------------------
 
       socket.onopen = () => {
+        if (
+          connectionIdRef.current !==
+          connectionId
+        ) {
+          socket.close();
+          return;
+        }
+
         console.log(
           "✅ WebSocket opened."
         );
@@ -2586,9 +2952,13 @@ Return only one valid canonical path from the allowed list.
             error
           );
 
+          clearConnectionTimeout();
+
           setError(
             "Could not initialize Gemini Live."
           );
+
+          setConnecting(false);
         }
       };
 
@@ -2598,6 +2968,13 @@ Return only one valid canonical path from the allowed list.
 
       socket.onmessage =
         async (event) => {
+          if (
+            connectionIdRef.current !==
+            connectionId
+          ) {
+            return;
+          }
+
           const data =
             await parseWebSocketMessage(
               event
@@ -2618,10 +2995,19 @@ Return only one valid canonical path from the allowed list.
 
       socket.onerror =
         (event) => {
+          if (
+            connectionIdRef.current !==
+            connectionId
+          ) {
+            return;
+          }
+
           console.error(
             "❌ WebSocket error:",
             event
           );
+
+          clearConnectionTimeout();
 
           setError(
             "Gemini voice connection encountered a problem."
@@ -2636,6 +3022,13 @@ Return only one valid canonical path from the allowed list.
 
       socket.onclose =
         (event) => {
+          if (
+            connectionIdRef.current !==
+            connectionId
+          ) {
+            return;
+          }
+
           console.log(
             "🔴 WebSocket closed.",
             {
@@ -2643,6 +3036,8 @@ Return only one valid canonical path from the allowed list.
               reason: event.reason,
             }
           );
+
+          clearConnectionTimeout();
 
           setConnected(false);
           setConnecting(false);
@@ -2654,6 +3049,13 @@ Return only one valid canonical path from the allowed list.
             false;
         };
     } catch (error) {
+      if (
+        connectionIdRef.current !==
+        connectionId
+      ) {
+        return;
+      }
+
       console.error(
         "❌ Voice startup error:",
         error
@@ -2688,9 +3090,17 @@ Return only one valid canonical path from the allowed list.
 
   function cleanup() {
     try {
+      // Invalidate the current connection so an old
+      // WebSocket cannot interfere with a new one.
+      connectionIdRef.current +=
+        1;
+
+      clearConnectionTimeout();
+
       stopAllAudio();
 
       processorRef.current?.disconnect();
+
       microphoneSourceRef.current?.disconnect();
 
       microphoneStreamRef.current
@@ -2699,7 +3109,8 @@ Return only one valid canonical path from the allowed list.
           track.stop();
         });
 
-      microphoneStreamRef.current = null;
+      microphoneStreamRef.current =
+        null;
 
       if (
         microphoneContextRef.current
@@ -2709,7 +3120,8 @@ Return only one valid canonical path from the allowed list.
           .catch(() => {});
       }
 
-      microphoneContextRef.current = null;
+      microphoneContextRef.current =
+        null;
 
       if (
         outputContextRef.current
@@ -2719,7 +3131,8 @@ Return only one valid canonical path from the allowed list.
           .catch(() => {});
       }
 
-      outputContextRef.current = null;
+      outputContextRef.current =
+        null;
 
       if (
         websocketRef.current
@@ -2729,14 +3142,23 @@ Return only one valid canonical path from the allowed list.
         } catch {}
       }
 
-      websocketRef.current = null;
+      websocketRef.current =
+        null;
 
-      processorRef.current = null;
-      microphoneSourceRef.current = null;
+      processorRef.current =
+        null;
 
-      microphoneStartedRef.current = false;
-      greetingSentRef.current = false;
-      lastNavigationTextRef.current = "";
+      microphoneSourceRef.current =
+        null;
+
+      microphoneStartedRef.current =
+        false;
+
+      greetingSentRef.current =
+        false;
+
+      lastNavigationTextRef.current =
+        "";
     } catch (error) {
       console.error(
         "Cleanup error:",
@@ -2757,7 +3179,8 @@ Return only one valid canonical path from the allowed list.
     setListening(false);
     setSpeaking(false);
 
-    isNavigatingRef.current = false;
+    isNavigatingRef.current =
+      false;
   }
 
   // ============================================================
@@ -2788,7 +3211,9 @@ Return only one valid canonical path from the allowed list.
     <>
       <button
         type="button"
-        onClick={handleVoiceButton}
+        onClick={
+          handleVoiceButton
+        }
         disabled={connecting}
         aria-label={
           connecting
