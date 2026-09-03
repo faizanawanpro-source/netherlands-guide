@@ -86,7 +86,14 @@ type ProfileData = {
   age?: string;
   profile?: string;
   city?: string;
+
+  /*
+   * IMPORTANT:
+   * language is the EXISTING Voice Assistant language.
+   * We are NOT changing its meaning.
+   */
   language?: string;
+
   hasFamily?: string;
   familyMembers?: string[];
   documents?: string[];
@@ -99,7 +106,32 @@ export default function OnboardingPage() {
   const [age, setAge] = useState("");
   const [profile, setProfile] = useState("");
   const [city, setCity] = useState("");
+
+  /*
+   * ============================================================
+   * VOICE ASSISTANT LANGUAGE
+   * ============================================================
+   *
+   * DO NOT CHANGE THIS.
+   *
+   * This is the existing Preferred language setting.
+   */
+
   const [language, setLanguage] = useState("English");
+
+  /*
+   * ============================================================
+   * APP READING LANGUAGE
+   * ============================================================
+   *
+   * NEW
+   *
+   * This is completely separate from "language".
+   *
+   * This controls Google Translate / the written app language.
+   */
+
+  const [appLanguage, setAppLanguage] = useState("English");
 
   const [hasFamily, setHasFamily] = useState("");
   const [familyMembers, setFamilyMembers] = useState<string[]>([]);
@@ -116,9 +148,6 @@ export default function OnboardingPage() {
    * ============================================================
    * LOAD EXISTING PROFILE
    * ============================================================
-   *
-   * If the user already created a profile, load it automatically.
-   * This means Edit Profile will NOT make them start over.
    */
 
   useEffect(() => {
@@ -127,6 +156,13 @@ export default function OnboardingPage() {
         "netherlandsGuideProfile"
       );
 
+      /*
+       * Load the EXISTING profile.
+       *
+       * The "language" property here remains the Voice
+       * Assistant language.
+       */
+
       if (savedProfile) {
         const parsed: ProfileData = JSON.parse(savedProfile);
 
@@ -134,25 +170,96 @@ export default function OnboardingPage() {
         setAge(parsed.age || "");
         setProfile(parsed.profile || "");
         setCity(parsed.city || "");
+
+        /*
+         * EXISTING VOICE ASSISTANT LANGUAGE.
+         * DO NOT CONNECT THIS TO GOOGLE TRANSLATE.
+         */
+
         setLanguage(parsed.language || "English");
+
         setHasFamily(parsed.hasFamily || "");
+
         setFamilyMembers(
           Array.isArray(parsed.familyMembers)
             ? parsed.familyMembers
             : []
         );
+
         setDocuments(
           Array.isArray(parsed.documents)
             ? parsed.documents
             : []
         );
       }
+
+      /*
+       * ========================================================
+       * LOAD SEPARATE APP LANGUAGE
+       * ========================================================
+       */
+
+      const savedAppLanguage = localStorage.getItem(
+        "netherlandsGuideAppLanguage"
+      );
+
+      if (savedAppLanguage) {
+        setAppLanguage(savedAppLanguage);
+      }
     } catch (error) {
-      console.error("Could not load saved profile:", error);
+      console.error(
+        "Could not load saved profile:",
+        error
+      );
     }
 
     setLoaded(true);
   }, []);
+
+  /*
+   * ============================================================
+   * APP LANGUAGE CHANGE
+   * ============================================================
+   *
+   * IMPORTANT:
+   *
+   * This does NOT change "language".
+   *
+   * It only changes the written app language.
+   */
+
+  function handleAppLanguageChange(
+    selectedLanguage: string
+  ) {
+    setAppLanguage(selectedLanguage);
+
+    try {
+      localStorage.setItem(
+        "netherlandsGuideAppLanguage",
+        selectedLanguage
+      );
+    } catch (error) {
+      console.warn(
+        "Could not save app language:",
+        error
+      );
+    }
+
+    /*
+     * Tell GoogleTranslate.tsx that the app language changed.
+     */
+
+    window.dispatchEvent(
+      new CustomEvent(
+        "netherlandsGuideLanguageChange",
+        {
+          detail: {
+            language: selectedLanguage,
+          },
+        }
+      )
+    );
+  }
 
   /*
    * ============================================================
@@ -176,14 +283,16 @@ export default function OnboardingPage() {
     city !== "" &&
     hasFamily !== "" &&
     documents.length > 0 &&
-    (hasFamily === "no" || familyMembers.length > 0);
+    (hasFamily === "no" ||
+      familyMembers.length > 0);
 
   const residentRequirements =
     isResident &&
     city !== "" &&
     hasFamily !== "" &&
     documents.length > 0 &&
-    (hasFamily === "no" || familyMembers.length > 0);
+    (hasFamily === "no" ||
+      familyMembers.length > 0);
 
   const canContinue =
     baseRequirements &&
@@ -200,12 +309,10 @@ export default function OnboardingPage() {
    * ============================================================
    */
 
-  function handleProfileChange(selectedProfile: string) {
+  function handleProfileChange(
+    selectedProfile: string
+  ) {
     setProfile(selectedProfile);
-
-    /*
-     * Tourist doesn't need city/family/documents.
-     */
 
     if (selectedProfile === "tourist") {
       setCity("");
@@ -214,19 +321,11 @@ export default function OnboardingPage() {
       setDocuments([]);
     }
 
-    /*
-     * Student doesn't need family/documents.
-     */
-
     if (selectedProfile === "student") {
       setHasFamily("");
       setFamilyMembers([]);
       setDocuments([]);
     }
-
-    /*
-     * Refugee/resident use family/documents.
-     */
 
     if (
       selectedProfile === "refugee" ||
@@ -247,7 +346,9 @@ export default function OnboardingPage() {
   function toggleFamily(id: string) {
     setFamilyMembers((current) => {
       if (current.includes(id)) {
-        return current.filter((item) => item !== id);
+        return current.filter(
+          (item) => item !== id
+        );
       }
 
       return [...current, id];
@@ -263,7 +364,9 @@ export default function OnboardingPage() {
   function toggleDocument(id: string) {
     setDocuments((current) => {
       if (current.includes(id)) {
-        return current.filter((item) => item !== id);
+        return current.filter(
+          (item) => item !== id
+        );
       }
 
       return [...current, id];
@@ -286,6 +389,12 @@ export default function OnboardingPage() {
       age,
       profile,
       city,
+
+      /*
+       * EXISTING VOICE ASSISTANT LANGUAGE.
+       * KEEP EXACTLY AS BEFORE.
+       */
+
       language,
 
       hasFamily:
@@ -305,14 +414,29 @@ export default function OnboardingPage() {
     };
 
     try {
+      /*
+       * Existing profile storage.
+       */
+
       localStorage.setItem(
         "netherlandsGuideProfile",
         JSON.stringify(profileData)
       );
 
       /*
-       * Save a separate flag so the app knows
-       * that onboarding has already been completed.
+       * NEW:
+       * Store APP READING LANGUAGE separately.
+       *
+       * This does NOT overwrite profile.language.
+       */
+
+      localStorage.setItem(
+        "netherlandsGuideAppLanguage",
+        appLanguage
+      );
+
+      /*
+       * Existing onboarding completion flag.
        */
 
       localStorage.setItem(
@@ -322,19 +446,24 @@ export default function OnboardingPage() {
 
       router.push("/dashboard");
     } catch (error) {
-      console.error("Could not save profile:", error);
+      console.error(
+        "Could not save profile:",
+        error
+      );
     }
   }
 
   /*
-   * Don't render until localStorage has been checked.
-   * This prevents the saved profile from briefly appearing empty.
+   * ============================================================
+   * LOADING
+   * ============================================================
    */
 
   if (!loaded) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50">
         <div className="text-center">
+
           <div className="text-5xl">
             🇳🇱
           </div>
@@ -342,6 +471,7 @@ export default function OnboardingPage() {
           <p className="mt-4 font-bold text-slate-700">
             Loading your profile...
           </p>
+
         </div>
       </main>
     );
@@ -379,7 +509,9 @@ export default function OnboardingPage() {
           </div>
 
           <span className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold">
-            {localStorage.getItem("netherlandsGuideProfile")
+            {localStorage.getItem(
+              "netherlandsGuideProfile"
+            )
               ? "Edit profile"
               : "Get started"}
           </span>
@@ -937,7 +1069,7 @@ export default function OnboardingPage() {
 
 
           {/* ================================================== */}
-          {/* LANGUAGE */}
+          {/* VOICE ASSISTANT LANGUAGE */}
           {/* ================================================== */}
 
           <div className="mt-8">
@@ -962,6 +1094,58 @@ export default function OnboardingPage() {
                   }
                   className={`rounded-full px-4 py-2 font-semibold transition ${
                     language === item
+                      ? "bg-blue-600 text-white"
+                      : "border border-slate-200 bg-white hover:bg-blue-50"
+                  }`}
+                >
+                  {item}
+                </button>
+
+              ))}
+
+            </div>
+
+          </div>
+
+
+          {/* ================================================== */}
+          {/* NEW: APP LANGUAGE / GOOGLE TRANSLATE */}
+          {/* ================================================== */}
+
+          <div className="mt-8 rounded-2xl border border-blue-100 bg-blue-50/50 p-5">
+
+            <div className="flex items-start gap-3">
+
+              <div className="text-2xl">
+                🌐
+              </div>
+
+              <div className="flex-1">
+
+                <label className="font-bold">
+                  App language
+                </label>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Choose the language you want to read Netherway in.
+                </p>
+
+              </div>
+
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+
+              {languages.map((item) => (
+
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() =>
+                    handleAppLanguageChange(item)
+                  }
+                  className={`rounded-full px-4 py-2 font-semibold transition ${
+                    appLanguage === item
                       ? "bg-blue-600 text-white"
                       : "border border-slate-200 bg-white hover:bg-blue-50"
                   }`}
@@ -1017,7 +1201,13 @@ export default function OnboardingPage() {
 
               {language && (
                 <p>
-                  🌐 Language: {language}
+                  🎤 Voice Assistant language: {language}
+                </p>
+              )}
+
+              {appLanguage && (
+                <p>
+                  🌐 App language: {appLanguage}
                 </p>
               )}
 
@@ -1086,4 +1276,3 @@ export default function OnboardingPage() {
     </main>
   );
 }
-

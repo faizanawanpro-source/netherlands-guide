@@ -33,26 +33,30 @@ const languageMap: Record<string, string> = {
   Ελληνικά: "el",
 };
 
-function getSelectedLanguage() {
+/*
+ * ============================================================
+ * GET APP LANGUAGE
+ * ============================================================
+ *
+ * IMPORTANT:
+ *
+ * This ONLY reads the separate app language.
+ *
+ * It does NOT read:
+ *
+ * netherlandsGuideProfile.language
+ *
+ * because that belongs to the Voice Assistant.
+ */
+
+function getSelectedLanguage(): string {
   try {
-    const directLanguage = localStorage.getItem(
+    const savedLanguage = localStorage.getItem(
       "netherlandsGuideAppLanguage"
     );
 
-    if (directLanguage) {
-      return directLanguage;
-    }
-
-    const savedProfile = localStorage.getItem(
-      "netherlandsGuideProfile"
-    );
-
-    if (savedProfile) {
-      const profile = JSON.parse(savedProfile);
-
-      if (profile?.appLanguage) {
-        return profile.appLanguage;
-      }
+    if (savedLanguage) {
+      return savedLanguage;
     }
   } catch (error) {
     console.warn(
@@ -64,51 +68,82 @@ function getSelectedLanguage() {
   return "English";
 }
 
-function getGoogleLanguage(language: string) {
+/*
+ * ============================================================
+ * GOOGLE LANGUAGE
+ * ============================================================
+ */
+
+function getGoogleLanguage(
+  language: string
+): string {
   return languageMap[language] || "en";
 }
 
-function setGoogleTranslateLanguage(language: string) {
+/*
+ * ============================================================
+ * APPLY GOOGLE TRANSLATE LANGUAGE
+ * ============================================================
+ */
+
+function setGoogleTranslateLanguage(
+  language: string
+) {
   const googleLanguage =
     getGoogleLanguage(language);
 
   /*
-   * Google Translate uses the googtrans cookie
-   * to remember the selected translation.
+   * ==========================================================
+   * ENGLISH
+   * ==========================================================
    *
-   * /en/ur means:
-   * translate from English to Urdu.
+   * English is the original language of the app.
+   *
+   * Remove Google Translate's translation cookie.
    */
 
   if (googleLanguage === "en") {
+
     document.cookie =
       "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
 
     document.cookie =
-      "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=" +
-      window.location.hostname +
-      ";";
+      `googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname};`;
+
+    const select =
+      document.querySelector<HTMLSelectElement>(
+        ".goog-te-combo"
+      );
+
+    if (select) {
+
+      select.value = "en";
+
+      select.dispatchEvent(
+        new Event("change", {
+          bubbles: true,
+        })
+      );
+
+    }
 
     return;
   }
 
-  const cookieValue = `/en/${googleLanguage}`;
+  /*
+   * ==========================================================
+   * OTHER LANGUAGES
+   * ==========================================================
+   */
+
+  const cookieValue =
+    `/en/${googleLanguage}`;
 
   document.cookie =
     `googtrans=${cookieValue}; path=/;`;
 
-  /*
-   * Google Translate also sometimes checks
-   * the domain cookie.
-   */
-
   document.cookie =
     `googtrans=${cookieValue}; path=/; domain=${window.location.hostname};`;
-
-  /*
-   * If the Google Translate select exists,
-   * change it directly.
-   */
 
   const select =
     document.querySelector<HTMLSelectElement>(
@@ -116,6 +151,7 @@ function setGoogleTranslateLanguage(language: string) {
     );
 
   if (select) {
+
     select.value = googleLanguage;
 
     select.dispatchEvent(
@@ -123,23 +159,34 @@ function setGoogleTranslateLanguage(language: string) {
         bubbles: true,
       })
     );
+
   }
 }
 
+/*
+ * ============================================================
+ * COMPONENT
+ * ============================================================
+ */
+
 export default function GoogleTranslate() {
+
   useEffect(() => {
+
     let cancelled = false;
 
     /*
-     * ============================================================
-     * HIDE GOOGLE TRANSLATE UI
-     * ============================================================
+     * ========================================================
+     * HIDE GOOGLE'S DEFAULT UI
+     * ========================================================
      *
-     * Google Translate still runs, but the user never sees
-     * the Google Translate dropdown/button.
+     * We use our own App language buttons.
+     *
+     * Google Translate works in the background.
      */
 
-    const style = document.createElement("style");
+    const style =
+      document.createElement("style");
 
     style.setAttribute(
       "data-netherway-google-translate",
@@ -183,12 +230,33 @@ export default function GoogleTranslate() {
     document.head.appendChild(style);
 
     /*
-     * ============================================================
+     * ========================================================
+     * APPLY CURRENT APP LANGUAGE
+     * ========================================================
+     */
+
+    const applyCurrentLanguage = () => {
+
+      if (cancelled) {
+        return;
+      }
+
+      const selectedLanguage =
+        getSelectedLanguage();
+
+      setGoogleTranslateLanguage(
+        selectedLanguage
+      );
+    };
+
+    /*
+     * ========================================================
      * INITIALIZE GOOGLE TRANSLATE
-     * ============================================================
+     * ========================================================
      */
 
     const initializeTranslate = () => {
+
       if (cancelled) {
         return false;
       }
@@ -200,17 +268,20 @@ export default function GoogleTranslate() {
 
       if (
         !element ||
-        !window.google?.translate?.TranslateElement
+        !window.google?.translate
+          ?.TranslateElement
       ) {
         return false;
       }
 
       /*
-       * Don't create the widget twice.
+       * Don't initialize the Google widget twice.
        */
 
       if (element.children.length === 0) {
+
         try {
+
           new window.google.translate.TranslateElement(
             {
               pageLanguage: "en",
@@ -220,10 +291,11 @@ export default function GoogleTranslate() {
 
               autoDisplay: false,
             },
-
             "google_translate_element"
           );
+
         } catch (error) {
+
           console.warn(
             "Google Translate could not initialize:",
             error
@@ -234,38 +306,47 @@ export default function GoogleTranslate() {
       }
 
       /*
-       * Give Google a moment to create its
-       * internal select element.
+       * Give Google's widget time to create its
+       * internal language selector.
        */
 
       window.setTimeout(() => {
+
         if (!cancelled) {
-          setGoogleTranslateLanguage(
-            getSelectedLanguage()
-          );
+          applyCurrentLanguage();
         }
-      }, 300);
+
+      }, 500);
 
       return true;
     };
+
+    /*
+     * ========================================================
+     * GOOGLE CALLBACK
+     * ========================================================
+     */
 
     window.googleTranslateElementInit =
       initializeTranslate;
 
     /*
-     * ============================================================
-     * LOAD GOOGLE TRANSLATE SCRIPT
-     * ============================================================
+     * ========================================================
+     * LOAD GOOGLE SCRIPT
+     * ========================================================
      */
 
     if (!initializeTranslate()) {
+
       let script =
         document.querySelector<HTMLScriptElement>(
           'script[data-google-translate="true"]'
         );
 
       if (!script) {
-        script = document.createElement("script");
+
+        script =
+          document.createElement("script");
 
         script.src =
           "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
@@ -282,14 +363,20 @@ export default function GoogleTranslate() {
       }
 
       /*
-       * Wait for Google Translate to become available.
+       * Keep checking until Google has loaded.
        */
 
       const interval =
         window.setInterval(() => {
+
           if (initializeTranslate()) {
-            window.clearInterval(interval);
+
+            window.clearInterval(
+              interval
+            );
+
           }
+
         }, 500);
 
       /*
@@ -297,19 +384,27 @@ export default function GoogleTranslate() {
        */
 
       window.setTimeout(() => {
-        window.clearInterval(interval);
+
+        window.clearInterval(
+          interval
+        );
+
       }, 15000);
     }
 
     /*
-     * ============================================================
-     * LISTEN FOR APP LANGUAGE CHANGES
-     * ============================================================
+     * ========================================================
+     * APP LANGUAGE EVENT
+     * ========================================================
+     *
+     * The onboarding page sends this event whenever
+     * the user chooses a new App language.
      */
 
     const handleLanguageChange = (
       event: Event
     ) => {
+
       const customEvent =
         event as CustomEvent<{
           language?: string;
@@ -319,13 +414,28 @@ export default function GoogleTranslate() {
         customEvent.detail?.language ||
         getSelectedLanguage();
 
-      localStorage.setItem(
-        "netherlandsGuideAppLanguage",
-        selectedLanguage
-      );
+      /*
+       * Save ONLY the app language.
+       */
+
+      try {
+
+        localStorage.setItem(
+          "netherlandsGuideAppLanguage",
+          selectedLanguage
+        );
+
+      } catch (error) {
+
+        console.warn(
+          "Could not save app language:",
+          error
+        );
+
+      }
 
       /*
-       * If Google is already ready, switch immediately.
+       * Apply immediately.
        */
 
       setGoogleTranslateLanguage(
@@ -333,17 +443,21 @@ export default function GoogleTranslate() {
       );
 
       /*
-       * Google Translate sometimes needs a
-       * small delay after initialization.
+       * Apply again after Google's widget has
+       * had time to react.
        */
 
       window.setTimeout(() => {
+
         if (!cancelled) {
+
           setGoogleTranslateLanguage(
             selectedLanguage
           );
+
         }
-      }, 500);
+
+      }, 700);
     };
 
     window.addEventListener(
@@ -352,12 +466,13 @@ export default function GoogleTranslate() {
     );
 
     /*
-     * ============================================================
+     * ========================================================
      * CLEANUP
-     * ============================================================
+     * ========================================================
      */
 
     return () => {
+
       cancelled = true;
 
       window.removeEventListener(
@@ -368,18 +483,20 @@ export default function GoogleTranslate() {
       if (
         window.googleTranslateElementInit
       ) {
+
         window.googleTranslateElementInit =
           undefined;
+
       }
 
       style.remove();
     };
+
   }, []);
 
   /*
-   * IMPORTANT:
-   * This element must exist so Google Translate
-   * can initialize, but it is intentionally invisible.
+   * Google's actual widget exists here,
+   * but CSS keeps it hidden.
    */
 
   return (

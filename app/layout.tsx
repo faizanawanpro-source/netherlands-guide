@@ -41,10 +41,8 @@ export default function RootLayout({
       <body suppressHydrationWarning>
         {children}
 
-        {/* Hidden Google Translate engine */}
         <GoogleTranslate />
 
-        {/* Global AI Voice Assistant */}
         <VoiceAssistant />
       </body>
     </html>
