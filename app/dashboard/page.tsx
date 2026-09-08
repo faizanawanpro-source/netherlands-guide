@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  Bell,
   Bot,
   BriefcaseBusiness,
   Building2,
@@ -31,6 +32,7 @@ import {
   translations,
   type Language,
 } from "@/lib/translations";
+import { supabase } from "@/lib/supabase";
 
 type ProfileType =
   | "refugee"
@@ -617,6 +619,8 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
   const [profileOpen, setProfileOpen] =
     useState(false);
+  const [unreadNotifications, setUnreadNotifications] =
+    useState(0);
 
   useEffect(() => {
     setMounted(true);
@@ -648,6 +652,54 @@ export default function DashboardPage() {
         error
       );
     }
+
+    const loadUnreadNotifications = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session?.user) {
+          setUnreadNotifications(0);
+          return;
+        }
+
+        const { count, error } = await supabase
+          .from("notifications")
+          .select("id", {
+            count: "exact",
+            head: true,
+          })
+          .eq("user_id", session.user.id)
+          .eq("read", false);
+
+        if (error) {
+          console.error(
+            "Could not load notification count:",
+            error
+          );
+          return;
+        }
+
+        setUnreadNotifications(count ?? 0);
+      } catch (error) {
+        console.error(
+          "Could not load notification count:",
+          error
+        );
+      }
+    };
+
+    loadUnreadNotifications();
+
+    const notificationInterval = window.setInterval(
+      loadUnreadNotifications,
+      30000
+    );
+
+    return () => {
+      window.clearInterval(notificationInterval);
+    };
   }, []);
 
   const currentProfile: ProfileType =
@@ -722,25 +774,51 @@ export default function DashboardPage() {
             </div>
           </Link>
 
-          <button
-            type="button"
-            onClick={() =>
-              setProfileOpen(true)
-            }
-            aria-label="Open profile"
-            className="group relative flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-white/10 text-sm font-black shadow-lg backdrop-blur-xl transition hover:scale-105 hover:bg-white/15 active:scale-95"
-          >
-            <span>
-              {profile.name?.trim()
-                ? profile.name
-                    .trim()
-                    .slice(0, 2)
-                    .toUpperCase()
-                : "NG"}
-            </span>
+          <div className="flex items-center gap-2">
+            {/* NOTIFICATIONS */}
 
-            <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#07111f] bg-emerald-400" />
-          </button>
+            <Link
+              href="/notifications"
+              aria-label={
+                unreadNotifications > 0
+                  ? `${unreadNotifications} unread notifications`
+                  : "Notifications"
+              }
+              className="relative flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white shadow-lg backdrop-blur-xl transition hover:scale-105 hover:bg-white/15 active:scale-95"
+            >
+              <Bell className="h-5 w-5" />
+
+              {unreadNotifications > 0 && (
+                <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full border-2 border-[#07111f] bg-red-500 px-1 text-[10px] font-black leading-none text-white shadow-lg">
+                  {unreadNotifications > 99
+                    ? "99+"
+                    : unreadNotifications}
+                </span>
+              )}
+            </Link>
+
+            {/* PROFILE */}
+
+            <button
+              type="button"
+              onClick={() =>
+                setProfileOpen(true)
+              }
+              aria-label="Open profile"
+              className="group relative flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-white/10 text-sm font-black shadow-lg backdrop-blur-xl transition hover:scale-105 hover:bg-white/15 active:scale-95"
+            >
+              <span>
+                {profile.name?.trim()
+                  ? profile.name
+                      .trim()
+                      .slice(0, 2)
+                      .toUpperCase()
+                  : "NG"}
+              </span>
+
+              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#07111f] bg-emerald-400" />
+            </button>
+          </div>
         </div>
       </header>
 

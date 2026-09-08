@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { supabase } from "@/lib/supabase";
+import { createNotifications } from "@/lib/notifications";
 
 type Deadline = {
   date: string;
@@ -48,6 +49,13 @@ type DuplicateDocument = {
   createdAt: string | null;
 };
 
+type SmartSuggestion = {
+  title: string;
+  message: string;
+  href: string;
+  icon: string;
+};
+
 const MAX_SAVED_LETTERS = 15;
 
 const languageMap: Record<string, string> = {
@@ -69,12 +77,358 @@ const languageMap: Record<string, string> = {
   "Bengali (Bangla)": "bn-BD",
 };
 
+/*
+ * --------------------------------------------------
+ * SMART APP SUGGESTIONS
+ * --------------------------------------------------
+ *
+ * Looks at the information already understood by
+ * the AI scanner and suggests relevant sections
+ * inside Netherlands Guide.
+ *
+ * This does NOT change the AI scan itself.
+ */
+function getSmartSuggestions(
+  scanResult: ScanResult
+): SmartSuggestion[] {
+  const text = [
+    scanResult.documentType,
+    scanResult.sender,
+    scanResult.subject,
+    scanResult.summary,
+    scanResult.explanation,
+    scanResult.consequences,
+    ...(scanResult.whatYouNeedToDo || []),
+    ...(scanResult.requiredDocuments || []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const suggestions: SmartSuggestion[] = [];
+
+  function containsAny(
+    keywords: string[]
+  ) {
+    return keywords.some(
+      (keyword) =>
+        text.includes(keyword)
+    );
+  }
+
+  function addSuggestion(
+    suggestion: SmartSuggestion
+  ) {
+    if (
+      !suggestions.some(
+        (item) =>
+          item.href ===
+          suggestion.href
+      )
+    ) {
+      suggestions.push(
+        suggestion
+      );
+    }
+  }
+
+  /*
+   * --------------------------------------------------
+   * BELASTINGDIENST / TAX / BENEFITS
+   * --------------------------------------------------
+   */
+  if (
+    containsAny([
+      "belastingdienst",
+      "belasting",
+      "inkomstenbelasting",
+      "belastingaangifte",
+      "aangifte inkomstenbelasting",
+      "toeslag",
+      "huurtoeslag",
+      "zorgtoeslag",
+      "kinderopvangtoeslag",
+      "kindgebonden budget",
+      "belastingaanslag",
+      "tax return",
+      "income tax",
+      "tax assessment",
+      "benefit",
+      "benefits",
+    ])
+  ) {
+    addSuggestion({
+      title: "Money & Taxes",
+      message:
+        "This letter appears to be related to taxes, benefits or the Belastingdienst. Check Money for financial information and guidance.",
+      href: "/money",
+      icon: "💰",
+    });
+  }
+
+  /*
+   * --------------------------------------------------
+   * MUNICIPALITY
+   * --------------------------------------------------
+   */
+  if (
+    containsAny([
+      "gemeente",
+      "municipality",
+      "gemeentelijk",
+      "burgerzaken",
+      "gemeentelijke",
+      "registratie in de gemeente",
+      "gemeentehuis",
+    ])
+  ) {
+    addSuggestion({
+      title: "Municipality",
+      message:
+        "This letter appears to be related to your municipality. Open Municipality for local services, registration and appointments.",
+      href: "/municipality",
+      icon: "🏛️",
+    });
+  }
+
+  /*
+   * --------------------------------------------------
+   * IND / RESIDENCE / IMMIGRATION
+   * --------------------------------------------------
+   */
+  if (
+    containsAny([
+      "ind",
+      "ind.",
+      "immigratie",
+      "immigration",
+      "verblijfsvergunning",
+      "verblijfsdocument",
+      "verblijfsrecht",
+      "verblijfstitel",
+      "residence permit",
+      "residence document",
+      "asiel",
+      "asylum",
+      "naturalisatie",
+      "naturalisation",
+      "nationaliteit",
+      "nationality",
+    ])
+  ) {
+    addSuggestion({
+      title: "Documents & Residence",
+      message:
+        "This letter may be related to immigration, residence or an important document. Open Documents for guidance.",
+      href: "/documents",
+      icon: "📄",
+    });
+  }
+
+  /*
+   * --------------------------------------------------
+   * DUO / EDUCATION
+   * --------------------------------------------------
+   */
+  if (
+    containsAny([
+      "duo",
+      "studiefinanciering",
+      "studentenreisproduct",
+      "student",
+      "opleiding",
+      "onderwijs",
+      "school",
+      "mbo",
+      "hbo",
+      "universiteit",
+      "studie",
+      "education",
+      "student finance",
+      "student travel",
+    ])
+  ) {
+    addSuggestion({
+      title: "Study",
+      message:
+        "This letter appears to be related to study, education or student finance. Open Study for useful information.",
+      href: "/study",
+      icon: "🎓",
+    });
+  }
+
+  /*
+   * --------------------------------------------------
+   * UWV / WORK
+   * --------------------------------------------------
+   */
+  if (
+    containsAny([
+      "uwv",
+      "werkgever",
+      "arbeidsovereenkomst",
+      "arbeidscontract",
+      "arbeid",
+      "werkloos",
+      "werkloosheid",
+      "uitkering",
+      "salaris",
+      "loon",
+      "employment",
+      "employer",
+      "job",
+      "unemployment",
+    ])
+  ) {
+    addSuggestion({
+      title: "Work",
+      message:
+        "This letter appears to be related to work, employment or benefits. Open Work for useful guidance.",
+      href: "/work",
+      icon: "💼",
+    });
+  }
+
+  /*
+   * --------------------------------------------------
+   * HEALTHCARE
+   * --------------------------------------------------
+   */
+  if (
+    containsAny([
+      "zorgverzekeraar",
+      "zorgverzekering",
+      "zorgtoeslag",
+      "zorgverzekering",
+      "huisarts",
+      "ziekenhuis",
+      "apotheek",
+      "ggd",
+      "zorg",
+      "gezondheid",
+      "health",
+      "healthcare",
+      "health insurance",
+      "doctor",
+      "hospital",
+    ])
+  ) {
+    addSuggestion({
+      title: "Healthcare",
+      message:
+        "This letter appears to be related to healthcare or health insurance. Open Healthcare for guidance.",
+      href: "/healthcare",
+      icon: "❤️",
+    });
+  }
+
+  /*
+   * --------------------------------------------------
+   * CJIB / RDW / VEHICLES / FINES
+   * --------------------------------------------------
+   */
+  if (
+    containsAny([
+      "cjib",
+      "boete",
+      "verkeersboete",
+      "verkeersovertreding",
+      "rdw",
+      "kenteken",
+      "voertuig",
+      "rijbewijs",
+      "auto",
+      "motor",
+      "vehicle",
+      "traffic fine",
+      "driving licence",
+      "driver's license",
+    ])
+  ) {
+    addSuggestion({
+      title: "Vehicles",
+      message:
+        "This letter appears to be related to a vehicle, traffic fine, driving licence or RDW. Open Vehicles for guidance.",
+      href: "/vehicles",
+      icon: "🚗",
+    });
+  }
+
+  /*
+   * --------------------------------------------------
+   * NS / PUBLIC TRANSPORT
+   * --------------------------------------------------
+   */
+  if (
+    containsAny([
+      "ns",
+      "ov-chipkaart",
+      "ovpay",
+      "openbaar vervoer",
+      "openbaarvervoer",
+      "trein",
+      "bus",
+      "tram",
+      "metro",
+      "transport",
+      "public transport",
+      "train",
+      "travel card",
+    ])
+  ) {
+    addSuggestion({
+      title: "Transport",
+      message:
+        "This letter appears to be related to public transport. Open Transport for useful information.",
+      href: "/transport",
+      icon: "🚆",
+    });
+  }
+
+  /*
+   * --------------------------------------------------
+   * HOUSING / RENT
+   * --------------------------------------------------
+   */
+  if (
+    containsAny([
+      "woning",
+      "woningcorporatie",
+      "huurcontract",
+      "verhuurder",
+      "huurprijs",
+      "huur",
+      "sociale huur",
+      "huurwoning",
+      "housing",
+      "rent",
+      "landlord",
+      "rental agreement",
+    ])
+  ) {
+    addSuggestion({
+      title: "Housing",
+      message:
+        "This letter appears to be related to housing or rent. Open Housing for useful information.",
+      href: "/housing",
+      icon: "🏠",
+    });
+  }
+
+  /*
+   * Keep the result useful and simple.
+   */
+  return suggestions.slice(0, 3);
+}
+
 export default function ScannerPage() {
   const inputRef =
     useRef<HTMLInputElement>(null);
 
   const audioRef =
-    useRef<HTMLAudioElement | null>(null);
+    useRef<HTMLAudioElement | null>(
+      null
+    );
 
   const audioUrlRef =
     useRef<string | null>(null);
@@ -113,7 +467,9 @@ export default function ScannerPage() {
     useState<number | null>(null);
 
   const [duplicateDocument, setDuplicateDocument] =
-    useState<DuplicateDocument | null>(null);
+    useState<DuplicateDocument | null>(
+      null
+    );
 
   const [pendingScanResult, setPendingScanResult] =
     useState<ScanResult | null>(null);
@@ -135,7 +491,9 @@ export default function ScannerPage() {
       }
 
       if (preview) {
-        URL.revokeObjectURL(preview);
+        URL.revokeObjectURL(
+          preview
+        );
       }
     };
   }, [preview]);
@@ -165,7 +523,9 @@ export default function ScannerPage() {
     setPendingScanResult(null);
 
     if (preview) {
-      URL.revokeObjectURL(preview);
+      URL.revokeObjectURL(
+        preview
+      );
     }
 
     setPreview("");
@@ -195,7 +555,9 @@ export default function ScannerPage() {
       throw sessionError;
     }
 
-    if (sessionData.session?.user) {
+    if (
+      sessionData.session?.user
+    ) {
       return sessionData.session;
     }
 
@@ -233,7 +595,10 @@ export default function ScannerPage() {
         count: "exact",
         head: true,
       })
-      .eq("user_id", userId);
+      .eq(
+        "user_id",
+        userId
+      );
 
     if (countError) {
       throw countError;
@@ -250,18 +615,7 @@ export default function ScannerPage() {
   }
 
   /*
-   * This is deliberately NOT the complete letter.
-   *
-   * It only uses the information already displayed
-   * in the result:
-   *
-   * - what the letter means
-   * - what the person needs to do
-   * - deadlines
-   * - payments
-   * - appointments
-   * - required documents
-   * - consequences
+   * Builds the information that is read aloud.
    */
   function buildSpeechText() {
     if (!result) {
@@ -511,7 +865,10 @@ export default function ScannerPage() {
       return;
     }
 
-    if (speaking || ttsLoading) {
+    if (
+      speaking ||
+      ttsLoading
+    ) {
       stopSpeaking();
       return;
     }
@@ -523,6 +880,7 @@ export default function ScannerPage() {
       setError(
         "There is no information available to read aloud."
       );
+
       return;
     }
 
@@ -569,7 +927,8 @@ export default function ScannerPage() {
           data.audioBase64,
           data.sampleRate ||
             24000,
-          data.channels || 1,
+          data.channels ||
+            1,
           data.bitsPerSample ||
             16
         );
@@ -658,6 +1017,18 @@ export default function ScannerPage() {
     }
   }
 
+  /*
+   * --------------------------------------------------
+   * SAVE SCAN
+   * --------------------------------------------------
+   *
+   * Saves the letter first.
+   *
+   * Only AFTER the letter has successfully been saved,
+   * notifications are created.
+   *
+   * If notifications fail, the letter is still saved.
+   */
   async function saveScan(
     scanResult: ScanResult
   ) {
@@ -743,7 +1114,9 @@ export default function ScannerPage() {
 
               appointments:
                 scanResult.appointments?.map(
-                  (appointment) => ({
+                  (
+                    appointment
+                  ) => ({
                     description:
                       appointment,
                   })
@@ -755,6 +1128,11 @@ export default function ScannerPage() {
       const data =
         await response.json();
 
+      /*
+       * --------------------------------------------------
+       * DUPLICATE PROTECTION
+       * --------------------------------------------------
+       */
       if (
         response.status ===
           409 &&
@@ -779,6 +1157,11 @@ export default function ScannerPage() {
         return;
       }
 
+      /*
+       * --------------------------------------------------
+       * SAVE ERROR
+       * --------------------------------------------------
+       */
       if (!response.ok) {
         const message =
           data?.details ||
@@ -806,6 +1189,11 @@ export default function ScannerPage() {
         return;
       }
 
+      /*
+       * --------------------------------------------------
+       * LETTER SAVED SUCCESSFULLY
+       * --------------------------------------------------
+       */
       setSaved(true);
 
       const newCount =
@@ -816,6 +1204,247 @@ export default function ScannerPage() {
       setSavedLetterCount(
         newCount
       );
+
+      /*
+       * --------------------------------------------------
+       * CREATE NOTIFICATIONS
+       * --------------------------------------------------
+       *
+       * Notifications are created only after the
+       * database save succeeds.
+       */
+      try {
+        const notifications: Array<{
+          userId: string;
+          type: string;
+          title: string;
+          message: string;
+          priority:
+            | "high"
+            | "medium"
+            | "normal";
+          actionUrl: string;
+          relatedType: string;
+        }> = [];
+
+        /*
+         * DEADLINES
+         */
+        if (
+          scanResult.deadlines?.length
+        ) {
+          scanResult.deadlines.forEach(
+            (deadline) => {
+              if (
+                !deadline.description &&
+                !deadline.date
+              ) {
+                return;
+              }
+
+              notifications.push({
+                userId:
+                  session.user.id,
+
+                type:
+                  "deadline",
+
+                title:
+                  "Important deadline",
+
+                message:
+                  deadline.date
+                    ? `${deadline.date}: ${deadline.description}`
+                    : deadline.description,
+
+                priority:
+                  deadline.importance ===
+                  "high"
+                    ? "high"
+                    : deadline.importance ===
+                      "low"
+                    ? "normal"
+                    : "medium",
+
+                actionUrl:
+                  "/administration",
+
+                relatedType:
+                  "deadline",
+              });
+            }
+          );
+        }
+
+        /*
+         * PAYMENTS
+         */
+        if (
+          scanResult.payments?.length
+        ) {
+          scanResult.payments.forEach(
+            (payment) => {
+              const paymentDetails =
+                [
+                  payment.amount
+                    ? `${payment.currency || ""} ${payment.amount}`.trim()
+                    : "",
+
+                  payment.recipient
+                    ? `to ${payment.recipient}`
+                    : "",
+
+                  payment.dueDate
+                    ? `due ${payment.dueDate}`
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+
+              notifications.push({
+                userId:
+                  session.user.id,
+
+                type:
+                  "payment",
+
+                title:
+                  "Payment detected",
+
+                message:
+                  paymentDetails ||
+                  "A payment was detected in your letter.",
+
+                priority:
+                  "high",
+
+                actionUrl:
+                  "/administration",
+
+                relatedType:
+                  "payment",
+              });
+            }
+          );
+        }
+
+        /*
+         * APPOINTMENTS
+         */
+        if (
+          scanResult.appointments?.length
+        ) {
+          scanResult.appointments.forEach(
+            (appointment) => {
+              if (!appointment) {
+                return;
+              }
+
+              notifications.push({
+                userId:
+                  session.user.id,
+
+                type:
+                  "appointment",
+
+                title:
+                  "Appointment detected",
+
+                message:
+                  appointment,
+
+                priority:
+                  "medium",
+
+                actionUrl:
+                  "/administration",
+
+                relatedType:
+                  "appointment",
+              });
+            }
+          );
+        }
+
+        /*
+         * ACTION REQUIRED
+         *
+         * One notification instead of one per action
+         * so users don't get spammed.
+         */
+        if (
+          scanResult
+            .whatYouNeedToDo
+            ?.length
+        ) {
+          const actionText =
+            scanResult
+              .whatYouNeedToDo
+              .slice(0, 3)
+              .join(" ");
+
+          if (actionText) {
+            notifications.push({
+              userId:
+                session.user.id,
+
+              type:
+                "action",
+
+              title:
+                "Action required",
+
+              message:
+                actionText,
+
+              priority:
+                scanResult.importance ===
+                "high"
+                  ? "high"
+                  : scanResult.importance ===
+                    "low"
+                  ? "normal"
+                  : "medium",
+
+              actionUrl:
+                "/administration",
+
+              relatedType:
+                "document",
+            });
+          }
+        }
+
+        /*
+         * Save all notifications in one request.
+         */
+        if (
+          notifications.length >
+          0
+        ) {
+          await createNotifications(
+            notifications
+          );
+
+          console.log(
+            "Scanner notifications created:",
+            notifications.length
+          );
+        }
+      } catch (
+        notificationError
+      ) {
+        /*
+         * IMPORTANT:
+         *
+         * Notification failure must NOT make the
+         * already-saved letter look like it failed.
+         */
+        console.error(
+          "Notification creation failed:",
+          notificationError
+        );
+      }
 
       console.log(
         "Scan saved successfully:",
@@ -852,6 +1481,11 @@ export default function ScannerPage() {
     setPendingScanResult(null);
   }
 
+  /*
+   * --------------------------------------------------
+   * SCAN LETTER
+   * --------------------------------------------------
+   */
   async function scanLetter() {
     if (!file) {
       setError(
@@ -902,6 +1536,9 @@ export default function ScannerPage() {
         selectedLanguage
       );
 
+      /*
+       * Get current saved-letter count.
+       */
       try {
         const session =
           await getUserSession();
@@ -977,6 +1614,9 @@ export default function ScannerPage() {
         );
       }
 
+      /*
+       * Normalize AI result.
+       */
       const normalizedResult:
         ScanResult = {
         documentType:
@@ -1200,6 +1840,11 @@ export default function ScannerPage() {
         "";
     }
   }
+
+  const smartSuggestions =
+    result
+      ? getSmartSuggestions(result)
+      : [];
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -1701,6 +2346,63 @@ export default function ScannerPage() {
                     result.consequences
                   }
                 </p>
+              </div>
+            )}
+
+            {smartSuggestions.length >
+              0 && (
+              <div className="rounded-[2rem] border border-violet-200 bg-violet-50 p-7">
+                <p className="text-xs font-black uppercase tracking-wider text-violet-600">
+                  💡 You may also find this useful
+                </p>
+
+                <p className="mt-2 leading-7 text-violet-950">
+                  Based on this letter, these parts
+                  of Netherlands Guide may be useful
+                  for you.
+                </p>
+
+                <div className="mt-5 grid gap-3">
+                  {smartSuggestions.map(
+                    (
+                      suggestion
+                    ) => (
+                      <Link
+                        key={
+                          suggestion.href
+                        }
+                        href={
+                          suggestion.href
+                        }
+                        className="group flex items-center gap-4 rounded-2xl border border-violet-100 bg-white p-4 transition hover:-translate-y-0.5 hover:border-violet-300 hover:shadow-md"
+                      >
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-2xl">
+                          {
+                            suggestion.icon
+                          }
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="font-black text-slate-900">
+                            {
+                              suggestion.title
+                            }
+                          </p>
+
+                          <p className="mt-1 text-sm leading-6 text-slate-600">
+                            {
+                              suggestion.message
+                            }
+                          </p>
+                        </div>
+
+                        <span className="text-xl text-violet-500 transition group-hover:translate-x-1">
+                          →
+                        </span>
+                      </Link>
+                    )
+                  )}
+                </div>
               </div>
             )}
 

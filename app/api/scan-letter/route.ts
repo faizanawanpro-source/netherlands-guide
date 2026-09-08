@@ -350,10 +350,10 @@ Use exactly this structure:
         temperature: 0.1,
 
         /*
-         * Lower than before to reduce the chance of
-         * hitting Groq's TPM limit.
+         * Groq currently enforces a 1,000 output-token
+         * per-minute limit for this service tier.
          */
-        max_completion_tokens: 2200,
+        max_completion_tokens: 900,
 
         reasoning_effort: "none",
 
@@ -567,6 +567,12 @@ Use exactly this structure:
       ) ||
       lowerMessage.includes(
         "too many requests"
+      ) ||
+      lowerMessage.includes(
+        "request too large"
+      ) ||
+      lowerMessage.includes(
+        "output tokens per minute"
       )
     ) {
       return NextResponse.json(

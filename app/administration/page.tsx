@@ -85,6 +85,12 @@ export default function AdministrationPage() {
   const [updatingPaymentId, setUpdatingPaymentId] =
     useState<string | null>(null);
 
+  const [updatingDeadlineId, setUpdatingDeadlineId] =
+    useState<string | null>(null);
+
+  const [updatingAppointmentId, setUpdatingAppointmentId] =
+    useState<string | null>(null);
+
   useEffect(() => {
     loadAdministration();
   }, []);
@@ -174,23 +180,19 @@ export default function AdministrationPage() {
       }
 
       setDocuments(
-        (documentsResponse.data ||
-          []) as DocumentItem[]
+        (documentsResponse.data || []) as DocumentItem[]
       );
 
       setDeadlines(
-        (deadlinesResponse.data ||
-          []) as DeadlineItem[]
+        (deadlinesResponse.data || []) as DeadlineItem[]
       );
 
       setPayments(
-        (paymentsResponse.data ||
-          []) as PaymentItem[]
+        (paymentsResponse.data || []) as PaymentItem[]
       );
 
       setAppointments(
-        (appointmentsResponse.data ||
-          []) as AppointmentItem[]
+        (appointmentsResponse.data || []) as AppointmentItem[]
       );
     } catch (err) {
       console.error(
@@ -375,6 +377,184 @@ export default function AdministrationPage() {
       );
     } finally {
       setUpdatingPaymentId(null);
+    }
+  }
+
+  async function toggleDeadlineStatus(
+    deadlineId: string,
+    completed: boolean
+  ) {
+    try {
+      setUpdatingDeadlineId(deadlineId);
+      setError("");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        setError(
+          "Your session could not be found. Please sign in again."
+        );
+        return;
+      }
+
+      const {
+        data,
+        error: updateError,
+      } = await supabase
+        .from("deadlines")
+        .update({
+          completed,
+        })
+        .eq(
+          "id",
+          deadlineId
+        )
+        .eq(
+          "user_id",
+          session.user.id
+        )
+        .select(
+          "id, deadline_date, calculated_deadline_date, received_date, deadline_type, relative_description, description, importance, completed"
+        )
+        .single();
+
+      if (updateError) {
+        console.error(
+          "Deadline status update error:",
+          updateError
+        );
+
+        setError(
+          "We could not update the deadline status. Please try again."
+        );
+
+        return;
+      }
+
+      if (!data) {
+        setError(
+          "The deadline status could not be updated. Please try again."
+        );
+
+        return;
+      }
+
+      setDeadlines(
+        (current) =>
+          current.map(
+            (deadline) =>
+              deadline.id === deadlineId
+                ? {
+                    ...deadline,
+                    completed:
+                      data.completed,
+                  }
+                : deadline
+          )
+      );
+    } catch (err) {
+      console.error(
+        "Deadline status error:",
+        err
+      );
+
+      setError(
+        "Something went wrong while updating the deadline."
+      );
+    } finally {
+      setUpdatingDeadlineId(null);
+    }
+  }
+
+  async function toggleAppointmentStatus(
+    appointmentId: string,
+    completed: boolean
+  ) {
+    try {
+      setUpdatingAppointmentId(
+        appointmentId
+      );
+      setError("");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        setError(
+          "Your session could not be found. Please sign in again."
+        );
+        return;
+      }
+
+      const {
+        data,
+        error: updateError,
+      } = await supabase
+        .from("appointments")
+        .update({
+          completed,
+        })
+        .eq(
+          "id",
+          appointmentId
+        )
+        .eq(
+          "user_id",
+          session.user.id
+        )
+        .select(
+          "id, organization, appointment_date, description, official_url, completed"
+        )
+        .single();
+
+      if (updateError) {
+        console.error(
+          "Appointment status update error:",
+          updateError
+        );
+
+        setError(
+          "We could not update the appointment status. Please try again."
+        );
+
+        return;
+      }
+
+      if (!data) {
+        setError(
+          "The appointment status could not be updated. Please try again."
+        );
+
+        return;
+      }
+
+      setAppointments(
+        (current) =>
+          current.map(
+            (appointment) =>
+              appointment.id === appointmentId
+                ? {
+                    ...appointment,
+                    completed:
+                      data.completed,
+                  }
+                : appointment
+          )
+      );
+    } catch (err) {
+      console.error(
+        "Appointment status error:",
+        err
+      );
+
+      setError(
+        "Something went wrong while updating the appointment."
+      );
+    } finally {
+      setUpdatingAppointmentId(null);
     }
   }
 
@@ -804,10 +984,22 @@ export default function AdministrationPage() {
         !item.completed
     );
 
+  const completedDeadlines =
+    deadlines.filter(
+      (item) =>
+        item.completed
+    );
+
   const activePayments =
     payments.filter(
       (item) =>
         !item.completed
+    );
+
+  const completedPayments =
+    payments.filter(
+      (item) =>
+        item.completed
     );
 
   const activeAppointments =
@@ -816,7 +1008,13 @@ export default function AdministrationPage() {
         !item.completed
     );
 
-  const urgentDeadlines =
+  const completedAppointments =
+    appointments.filter(
+      (item) =>
+        item.completed
+    );
+
+  const overdueDeadlines =
     activeDeadlines.filter(
       (item) => {
         if (
@@ -828,7 +1026,28 @@ export default function AdministrationPage() {
         return (
           getDaysUntil(
             item.deadline_date
-          ) <= 7
+          ) < 0
+        );
+      }
+    );
+
+  const urgentDeadlines =
+    activeDeadlines.filter(
+      (item) => {
+        if (
+          !item.deadline_date
+        ) {
+          return false;
+        }
+
+        const days =
+          getDaysUntil(
+            item.deadline_date
+          );
+
+        return (
+          days >= 0 &&
+          days <= 7
         );
       }
     );
@@ -839,6 +1058,12 @@ export default function AdministrationPage() {
         !item.deadline_date &&
         isRelativeDeadline(item)
     );
+
+  const totalAttentionItems =
+    overdueDeadlines.length +
+    urgentDeadlines.length +
+    activePayments.length +
+    activeAppointments.length;
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -852,30 +1077,62 @@ export default function AdministrationPage() {
             ← Back to Home
           </a>
 
-          <Link
-            href="/scanner"
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-          >
-            🤖 Scan a letter
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/notifications"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              🔔 Notifications
+            </Link>
+
+            <Link
+              href="/scanner"
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+            >
+              🤖 Scan a letter
+            </Link>
+          </div>
         </div>
       </header>
 
       {/* Hero */}
       <section className="bg-gradient-to-br from-indigo-700 via-purple-700 to-fuchsia-700 text-white">
         <div className="mx-auto max-w-7xl px-6 py-12">
-          <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-purple-200">
-            Netherlands Guide AI
-          </p>
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-purple-200">
+                Netherlands Guide AI
+              </p>
 
-          <h1 className="text-4xl font-bold tracking-tight md:text-5xl">
-            📋 My Administration
-          </h1>
+              <h1 className="text-4xl font-bold tracking-tight md:text-5xl">
+                📋 My Administration
+              </h1>
 
-          <p className="mt-4 max-w-2xl text-lg leading-8 text-purple-100">
-            All your important letters, deadlines,
-            payments and appointments in one place.
-          </p>
+              <p className="mt-4 max-w-2xl text-lg leading-8 text-purple-100">
+                All your important letters, deadlines,
+                payments and appointments in one place.
+              </p>
+            </div>
+
+            {totalAttentionItems > 0 && (
+              <div className="rounded-3xl border border-white/20 bg-white/10 p-5 backdrop-blur-xl">
+                <p className="text-xs font-bold uppercase tracking-widest text-purple-200">
+                  Needs attention
+                </p>
+
+                <p className="mt-1 text-4xl font-black">
+                  {totalAttentionItems}
+                </p>
+
+                <p className="mt-1 text-sm text-purple-100">
+                  important item
+                  {totalAttentionItems === 1
+                    ? ""
+                    : "s"} to handle
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </section>
 
@@ -958,7 +1215,9 @@ export default function AdministrationPage() {
                 </p>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Still to complete
+                  {overdueDeadlines.length > 0
+                    ? `${overdueDeadlines.length} overdue`
+                    : "Still to complete"}
                 </p>
               </div>
 
@@ -1003,30 +1262,69 @@ export default function AdministrationPage() {
               </div>
             </section>
 
-            {/* Urgent area */}
-            {urgentDeadlines.length > 0 && (
+            {/* Attention summary */}
+            {overdueDeadlines.length > 0 && (
               <section className="mt-10">
                 <div className="rounded-3xl border border-red-200 bg-red-50 p-6">
+                  <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-start gap-4">
+                      <div className="text-3xl">
+                        🚨
+                      </div>
+
+                      <div>
+                        <h2 className="text-xl font-bold text-red-900">
+                          You have overdue deadlines
+                        </h2>
+
+                        <p className="mt-1 text-sm leading-6 text-red-700">
+                          {overdueDeadlines.length} deadline
+                          {overdueDeadlines.length ===
+                          1
+                            ? ""
+                            : "s"}{" "}
+                          has already passed and may require immediate attention.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl bg-red-100 px-5 py-3 text-center">
+                      <p className="text-2xl font-black text-red-800">
+                        {overdueDeadlines.length}
+                      </p>
+
+                      <p className="text-xs font-semibold text-red-700">
+                        overdue
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {urgentDeadlines.length > 0 && (
+              <section className="mt-5">
+                <div className="rounded-3xl border border-orange-200 bg-orange-50 p-6">
                   <div className="flex items-start gap-4">
                     <div className="text-3xl">
-                      🚨
+                      ⚠️
                     </div>
 
                     <div>
-                      <h2 className="text-xl font-bold text-red-900">
-                        You have upcoming deadlines
+                      <h2 className="text-xl font-bold text-orange-900">
+                        Upcoming deadlines
                       </h2>
 
-                      <p className="mt-1 text-sm text-red-700">
-                        {
-                          urgentDeadlines.length
-                        }{" "}
-                        deadline
+                      <p className="mt-1 text-sm leading-6 text-orange-800">
+                        {urgentDeadlines.length} deadline
                         {urgentDeadlines.length ===
                         1
                           ? ""
                           : "s"}{" "}
-                        require attention within the next 7 days.
+                        {urgentDeadlines.length === 1
+                          ? "is"
+                          : "are"}{" "}
+                        due within the next 7 days.
                       </p>
                     </div>
                   </div>
@@ -1036,7 +1334,7 @@ export default function AdministrationPage() {
 
             {/* Deadlines needing a received date */}
             {deadlinesNeedingDate.length > 0 && (
-              <section className="mt-10">
+              <section className="mt-5">
                 <div className="rounded-3xl border border-orange-200 bg-orange-50 p-6">
                   <div className="flex items-start gap-4">
                     <div className="text-3xl">
@@ -1072,14 +1370,22 @@ export default function AdministrationPage() {
 
             {/* Deadlines */}
             <section className="mt-10">
-              <div className="mb-5">
-                <h2 className="text-2xl font-bold">
-                  ⏰ Deadlines
-                </h2>
+              <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold">
+                    ⏰ Deadlines
+                  </h2>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Important dates extracted from your letters.
-                </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Important dates extracted from your letters.
+                  </p>
+                </div>
+
+                {completedDeadlines.length > 0 && (
+                  <span className="text-sm font-semibold text-green-600">
+                    ✓ {completedDeadlines.length} completed
+                  </span>
+                )}
               </div>
 
               {deadlines.length ===
@@ -1122,16 +1428,28 @@ export default function AdministrationPage() {
                           key={
                             deadline.id
                           }
-                          className="rounded-3xl border bg-white p-6 shadow-sm"
+                          className={`rounded-3xl border bg-white p-6 shadow-sm transition ${
+                            deadline.completed
+                              ? "border-green-200 bg-green-50/40"
+                              : ""
+                          }`}
                         >
                           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-lg">
-                                  📌
+                                  {deadline.completed
+                                    ? "✅"
+                                    : "📌"}
                                 </span>
 
-                                <h3 className="font-bold">
+                                <h3
+                                  className={`font-bold ${
+                                    deadline.completed
+                                      ? "text-slate-500 line-through"
+                                      : ""
+                                  }`}
+                                >
                                   {
                                     deadline.description
                                   }
@@ -1147,7 +1465,8 @@ export default function AdministrationPage() {
                               </div>
 
                               {relative &&
-                              !hasDate ? (
+                              !hasDate &&
+                              !deadline.completed ? (
                                 <div className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 p-4">
                                   <p className="text-sm font-semibold text-orange-900">
                                     📅 This deadline depends on when you received the letter.
@@ -1192,20 +1511,48 @@ export default function AdministrationPage() {
                                 )}
                             </div>
 
-                            {hasDate &&
-                              !deadline.completed && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    openDeadlineCalculator(
-                                      deadline
-                                    )
-                                  }
-                                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                                >
-                                  View deadline
-                                </button>
-                              )}
+                            <div className="flex flex-col gap-2 sm:flex-row">
+                              {hasDate &&
+                                !deadline.completed && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openDeadlineCalculator(
+                                        deadline
+                                      )
+                                    }
+                                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                  >
+                                    View deadline
+                                  </button>
+                                )}
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  toggleDeadlineStatus(
+                                    deadline.id,
+                                    !deadline.completed
+                                  )
+                                }
+                                disabled={
+                                  updatingDeadlineId ===
+                                  deadline.id
+                                }
+                                className={`rounded-xl px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                                  deadline.completed
+                                    ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                                    : "bg-green-600 text-white hover:bg-green-700"
+                                }`}
+                              >
+                                {updatingDeadlineId ===
+                                deadline.id
+                                  ? "Updating..."
+                                  : deadline.completed
+                                  ? "↩ Mark as active"
+                                  : "✓ Mark completed"}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -1217,14 +1564,22 @@ export default function AdministrationPage() {
 
             {/* Payments */}
             <section className="mt-10">
-              <div className="mb-5">
-                <h2 className="text-2xl font-bold">
-                  💶 Payments
-                </h2>
+              <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold">
+                    💶 Payments
+                  </h2>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Payment obligations found in your documents.
-                </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Payment obligations found in your documents.
+                  </p>
+                </div>
+
+                {completedPayments.length > 0 && (
+                  <span className="text-sm font-semibold text-green-600">
+                    ✓ {completedPayments.length} paid
+                  </span>
+                )}
               </div>
 
               {payments.length ===
@@ -1250,7 +1605,11 @@ export default function AdministrationPage() {
                         key={
                           payment.id
                         }
-                        className="rounded-3xl border bg-white p-6 shadow-sm"
+                        className={`rounded-3xl border bg-white p-6 shadow-sm ${
+                          payment.completed
+                            ? "border-green-200 bg-green-50/40"
+                            : ""
+                        }`}
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div>
@@ -1265,7 +1624,9 @@ export default function AdministrationPage() {
                           </div>
 
                           <span className="text-3xl">
-                            💶
+                            {payment.completed
+                              ? "✅"
+                              : "💶"}
                           </span>
                         </div>
 
@@ -1389,14 +1750,22 @@ export default function AdministrationPage() {
 
             {/* Appointments */}
             <section className="mt-10">
-              <div className="mb-5">
-                <h2 className="text-2xl font-bold">
-                  📅 Appointments
-                </h2>
+              <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold">
+                    📅 Appointments
+                  </h2>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Appointments identified from your documents.
-                </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Appointments identified from your documents.
+                  </p>
+                </div>
+
+                {completedAppointments.length > 0 && (
+                  <span className="text-sm font-semibold text-green-600">
+                    ✓ {completedAppointments.length} completed
+                  </span>
+                )}
               </div>
 
               {appointments.length ===
@@ -1422,17 +1791,29 @@ export default function AdministrationPage() {
                         key={
                           appointment.id
                         }
-                        className="rounded-3xl border bg-white p-6 shadow-sm"
+                        className={`rounded-3xl border bg-white p-6 shadow-sm ${
+                          appointment.completed
+                            ? "border-green-200 bg-green-50/40"
+                            : ""
+                        }`}
                       >
                         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
                           <div>
                             <div className="flex items-center gap-3">
                               <span className="text-3xl">
-                                📅
+                                {appointment.completed
+                                  ? "✅"
+                                  : "📅"}
                               </span>
 
                               <div>
-                                <h3 className="text-xl font-bold">
+                                <h3
+                                  className={`text-xl font-bold ${
+                                    appointment.completed
+                                      ? "text-slate-500 line-through"
+                                      : ""
+                                  }`}
+                                >
                                   {appointment.organization ||
                                     "Appointment"}
                                 </h3>
@@ -1454,18 +1835,46 @@ export default function AdministrationPage() {
                             )}
                           </div>
 
-                          {appointment.official_url && (
-                            <a
-                              href={
-                                appointment.official_url
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            {appointment.official_url && (
+                              <a
+                                href={
+                                  appointment.official_url
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded-xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white hover:bg-slate-700"
+                              >
+                                Open official website
+                              </a>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                toggleAppointmentStatus(
+                                  appointment.id,
+                                  !appointment.completed
+                                )
                               }
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="rounded-xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white hover:bg-slate-700"
+                              disabled={
+                                updatingAppointmentId ===
+                                appointment.id
+                              }
+                              className={`rounded-xl px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                                appointment.completed
+                                  ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                                  : "bg-green-600 text-white hover:bg-green-700"
+                              }`}
                             >
-                              Open official website
-                            </a>
-                          )}
+                              {updatingAppointmentId ===
+                              appointment.id
+                                ? "Updating..."
+                                : appointment.completed
+                                ? "↩ Mark as active"
+                                : "✓ Mark completed"}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )

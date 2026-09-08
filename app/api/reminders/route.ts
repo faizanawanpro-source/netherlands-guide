@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -42,23 +43,12 @@ function getDaysDifference(
 
 function getReminderType(
   daysUntil: number,
-  itemType: ReminderItemType
+  _itemType: ReminderItemType
 ): ReminderType | null {
-  if (daysUntil === 7) {
-    return "7_days";
-  }
-
-  if (daysUntil === 3) {
-    return "3_days";
-  }
-
-  if (daysUntil === 1) {
-    return "1_day";
-  }
-
-  if (daysUntil === 0) {
-    return "due_today";
-  }
+  if (daysUntil === 7) return "7_days";
+  if (daysUntil === 3) return "3_days";
+  if (daysUntil === 1) return "1_day";
+  if (daysUntil === 0) return "due_today";
 
   return null;
 }
@@ -73,8 +63,8 @@ function getReminderTitle(
     (itemType === "payment"
       ? "Payment"
       : itemType === "deadline"
-      ? "Deadline"
-      : "Appointment");
+        ? "Deadline"
+        : "Appointment");
 
   if (reminderType === "7_days") {
     return `${itemName} is due in 7 days`;
@@ -121,9 +111,11 @@ export async function GET(request: Request) {
 
     const authHeader = request.headers.get("authorization");
 
+    const cronSecret = process.env.CRON_SECRET;
+    const reminderSecret = process.env.REMINDER_SECRET;
+
     const expectedSecret =
-      process.env.CRON_SECRET ??
-      process.env.REMINDER_SECRET;
+      cronSecret ?? reminderSecret;
 
     if (!expectedSecret) {
       console.error(
@@ -133,6 +125,8 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           error: "Cron secret is not configured",
+          hasCronSecret: Boolean(cronSecret),
+          hasReminderSecret: Boolean(reminderSecret),
         },
         {
           status: 500,
@@ -144,6 +138,9 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           error: "Unauthorized",
+          hasCronSecret: Boolean(cronSecret),
+          hasReminderSecret: Boolean(reminderSecret),
+          authorizationHeaderExists: Boolean(authHeader),
         },
         {
           status: 401,
@@ -162,13 +159,6 @@ export async function GET(request: Request) {
 
     const supabaseSecretKey =
       process.env.SUPABASE_SECRET_KEY;
-
-    /*
-     * TEMPORARY DEBUGGING
-     *
-     * This only returns true/false.
-     * It NEVER returns the actual URL or secret key.
-     */
 
     if (!supabaseUrl || !supabaseSecretKey) {
       console.error(
@@ -235,18 +225,16 @@ export async function GET(request: Request) {
       error: paymentsError,
     } = await supabaseAdmin
       .from("payments")
-      .select(
-        `
-          id,
-          user_id,
-          amount,
-          currency,
-          due_date,
-          recipient,
-          payment_reference,
-          completed
-        `
-      )
+      .select(`
+        id,
+        user_id,
+        amount,
+        currency,
+        due_date,
+        recipient,
+        payment_reference,
+        completed
+      `)
       .eq("completed", false)
       .not("due_date", "is", null);
 
@@ -255,9 +243,7 @@ export async function GET(request: Request) {
     }
 
     for (const payment of payments ?? []) {
-      if (!payment.due_date) {
-        continue;
-      }
+      if (!payment.due_date) continue;
 
       const daysUntil = getDaysDifference(
         payment.due_date,
@@ -269,9 +255,7 @@ export async function GET(request: Request) {
         "payment"
       );
 
-      if (!reminderType) {
-        continue;
-      }
+      if (!reminderType) continue;
 
       const {
         data: existingLog,
@@ -298,15 +282,13 @@ export async function GET(request: Request) {
           ? `${payment.currency || "€"}${payment.amount}`
           : "the payment";
 
-      const recipientText =
-        payment.recipient
-          ? `Recipient: ${payment.recipient}.`
-          : "";
+      const recipientText = payment.recipient
+        ? `Recipient: ${payment.recipient}.`
+        : "";
 
-      const referenceText =
-        payment.payment_reference
-          ? ` Payment reference: ${payment.payment_reference}.`
-          : "";
+      const referenceText = payment.payment_reference
+        ? ` Payment reference: ${payment.payment_reference}.`
+        : "";
 
       const details =
         `${amountText} is due on ${payment.due_date}. ` +
@@ -329,8 +311,8 @@ export async function GET(request: Request) {
         reminderType === "1_day"
           ? "high"
           : reminderType === "3_days"
-          ? "medium"
-          : "normal";
+            ? "medium"
+            : "normal";
 
       const {
         data: notification,
@@ -385,16 +367,14 @@ export async function GET(request: Request) {
       error: deadlinesError,
     } = await supabaseAdmin
       .from("deadlines")
-      .select(
-        `
-          id,
-          user_id,
-          deadline_date,
-          description,
-          importance,
-          completed
-        `
-      )
+      .select(`
+        id,
+        user_id,
+        deadline_date,
+        description,
+        importance,
+        completed
+      `)
       .eq("completed", false)
       .not("deadline_date", "is", null);
 
@@ -403,9 +383,7 @@ export async function GET(request: Request) {
     }
 
     for (const deadline of deadlines ?? []) {
-      if (!deadline.deadline_date) {
-        continue;
-      }
+      if (!deadline.deadline_date) continue;
 
       const daysUntil = getDaysDifference(
         deadline.deadline_date,
@@ -417,9 +395,7 @@ export async function GET(request: Request) {
         "deadline"
       );
 
-      if (!reminderType) {
-        continue;
-      }
+      if (!reminderType) continue;
 
       const {
         data: existingLog,
@@ -471,8 +447,8 @@ export async function GET(request: Request) {
         reminderType === "1_day"
           ? "high"
           : reminderType === "3_days"
-          ? "medium"
-          : "normal";
+            ? "medium"
+            : "normal";
 
       const {
         data: notification,
@@ -527,17 +503,15 @@ export async function GET(request: Request) {
       error: appointmentsError,
     } = await supabaseAdmin
       .from("appointments")
-      .select(
-        `
-          id,
-          user_id,
-          organization,
-          appointment_date,
-          description,
-          official_url,
-          completed
-        `
-      )
+      .select(`
+        id,
+        user_id,
+        organization,
+        appointment_date,
+        description,
+        official_url,
+        completed
+      `)
       .eq("completed", false)
       .not("appointment_date", "is", null);
 
@@ -546,9 +520,7 @@ export async function GET(request: Request) {
     }
 
     for (const appointment of appointments ?? []) {
-      if (!appointment.appointment_date) {
-        continue;
-      }
+      if (!appointment.appointment_date) continue;
 
       const appointmentDateKey =
         getNetherlandsDateKey(
@@ -598,9 +570,7 @@ export async function GET(request: Request) {
         "You have an upcoming appointment.";
 
       const appointmentDate =
-        new Date(
-          appointment.appointment_date
-        );
+        new Date(appointment.appointment_date);
 
       const formattedTime =
         new Intl.DateTimeFormat("en-GB", {

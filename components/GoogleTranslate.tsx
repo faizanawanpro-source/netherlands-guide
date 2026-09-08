@@ -33,12 +33,6 @@ const languageMap: Record<string, string> = {
   Ελληνικά: "el",
 };
 
-/*
- * ============================================================
- * GET APP LANGUAGE
- * ============================================================
- */
-
 function getSelectedLanguage(): string {
   try {
     const savedLanguage = localStorage.getItem(
@@ -55,30 +49,12 @@ function getSelectedLanguage(): string {
   return "English";
 }
 
-/*
- * ============================================================
- * GOOGLE LANGUAGE
- * ============================================================
- */
-
 function getGoogleLanguage(language: string): string {
   return languageMap[language] || "en";
 }
 
-/*
- * ============================================================
- * APPLY GOOGLE TRANSLATE LANGUAGE
- * ============================================================
- */
-
 function setGoogleTranslateLanguage(language: string) {
   const googleLanguage = getGoogleLanguage(language);
-
-  /*
-   * ==========================================================
-   * ENGLISH
-   * ==========================================================
-   */
 
   if (googleLanguage === "en") {
     document.cookie =
@@ -103,12 +79,6 @@ function setGoogleTranslateLanguage(language: string) {
     return;
   }
 
-  /*
-   * ==========================================================
-   * OTHER LANGUAGES
-   * ==========================================================
-   */
-
   const cookieValue = `/en/${googleLanguage}`;
 
   document.cookie =
@@ -131,25 +101,63 @@ function setGoogleTranslateLanguage(language: string) {
   }
 }
 
-/*
- * ============================================================
- * COMPONENT
- * ============================================================
- */
-
 export default function GoogleTranslate() {
   useEffect(() => {
     let cancelled = false;
 
     /*
      * ========================================================
-     * HIDE GOOGLE TRANSLATE UI
+     * PROTECT REACT FROM GOOGLE TRANSLATE DOM CHANGES
      * ========================================================
      *
-     * Google Translate is still loaded and used as the
-     * translation engine.
+     * Google Translate can remove or replace DOM nodes that
+     * React still expects to exist.
      *
-     * Only Google's visible interface is hidden.
+     * When React tries to remove a node that Google Translate
+     * has already removed, the browser throws:
+     *
+     * NotFoundError: The object can not be found here.
+     *
+     * This small protection only skips the DOM operation when
+     * the node is genuinely no longer a child of the parent.
+     *
+     * Normal React DOM operations continue to work normally.
+     */
+
+    const originalRemoveChild = Node.prototype.removeChild;
+
+    Node.prototype.removeChild = function <T extends Node>(
+      child: T
+    ): T {
+      if (child.parentNode !== this) {
+        return child;
+      }
+
+      return originalRemoveChild.call(this, child) as T;
+    };
+
+    /*
+     * Google Translate can also change the reference node
+     * used by insertBefore. Protect that operation as well.
+     */
+
+    const originalInsertBefore = Node.prototype.insertBefore;
+
+    Node.prototype.insertBefore = function <T extends Node>(
+      node: T,
+      child: Node | null
+    ): T {
+      if (child && child.parentNode !== this) {
+        return originalInsertBefore.call(this, node, null) as T;
+      }
+
+      return originalInsertBefore.call(this, node, child) as T;
+    };
+
+    /*
+     * ========================================================
+     * HIDE GOOGLE TRANSLATE UI
+     * ========================================================
      */
 
     const style = document.createElement("style");
@@ -160,12 +168,6 @@ export default function GoogleTranslate() {
     );
 
     style.textContent = `
-      /*
-       * Hide the Google Translate container completely.
-       * The Google widget still exists in the DOM so that
-       * JavaScript can control its language selector.
-       */
-
       #google_translate_element {
         position: fixed !important;
         width: 0 !important;
@@ -183,10 +185,6 @@ export default function GoogleTranslate() {
         top: -999999px !important;
       }
 
-      /*
-       * Google Translate top banner / toolbar
-       */
-
       .goog-te-banner-frame,
       .goog-te-banner-frame.skiptranslate,
       iframe.goog-te-banner-frame,
@@ -201,19 +199,11 @@ export default function GoogleTranslate() {
         pointer-events: none !important;
       }
 
-      /*
-       * Prevent Google from pushing the entire page down.
-       */
-
       html,
       body {
         top: 0 !important;
         margin-top: 0 !important;
       }
-
-      /*
-       * Hide Google's visible gadget/dropdown.
-       */
 
       .goog-te-gadget,
       .goog-te-gadget-simple,
@@ -226,21 +216,12 @@ export default function GoogleTranslate() {
         visibility: hidden !important;
       }
 
-      /*
-       * Hide Google's branding/text.
-       */
-
       .goog-te-gadget span,
       .goog-te-gadget a,
       .goog-te-gadget img {
         display: none !important;
         visibility: hidden !important;
       }
-
-      /*
-       * Hide Google Translate popups/menus if Google creates
-       * them outside the main container.
-       */
 
       .goog-te-balloon-frame,
       .goog-te-ftab,
@@ -250,10 +231,6 @@ export default function GoogleTranslate() {
         visibility: hidden !important;
       }
 
-      /*
-       * Hide Google Translate tooltip/highlight UI.
-       */
-
       .goog-tooltip,
       .goog-tooltip:hover,
       .goog-text-highlight {
@@ -262,10 +239,6 @@ export default function GoogleTranslate() {
         background: transparent !important;
         box-shadow: none !important;
       }
-
-      /*
-       * Make sure the page never gets shifted by Google.
-       */
 
       body.translated-ltr,
       body.translated-rtl {
@@ -314,10 +287,6 @@ export default function GoogleTranslate() {
         return false;
       }
 
-      /*
-       * Don't initialize twice.
-       */
-
       if (element.children.length === 0) {
         try {
           new window.google.translate.TranslateElement(
@@ -340,10 +309,6 @@ export default function GoogleTranslate() {
           return false;
         }
       }
-
-      /*
-       * Give Google time to create its internal selector.
-       */
 
       window.setTimeout(() => {
         if (!cancelled) {
@@ -392,19 +357,11 @@ export default function GoogleTranslate() {
         document.body.appendChild(script);
       }
 
-      /*
-       * Keep checking until Google has loaded.
-       */
-
       const interval = window.setInterval(() => {
         if (initializeTranslate()) {
           window.clearInterval(interval);
         }
       }, 500);
-
-      /*
-       * Stop checking after 15 seconds.
-       */
 
       window.setTimeout(() => {
         window.clearInterval(interval);
@@ -427,10 +384,6 @@ export default function GoogleTranslate() {
         customEvent.detail?.language ||
         getSelectedLanguage();
 
-      /*
-       * Save ONLY the app language.
-       */
-
       try {
         localStorage.setItem(
           "netherlandsGuideAppLanguage",
@@ -443,17 +396,9 @@ export default function GoogleTranslate() {
         );
       }
 
-      /*
-       * Apply immediately.
-       */
-
       setGoogleTranslateLanguage(
         selectedLanguage
       );
-
-      /*
-       * Apply again after Google reacts.
-       */
 
       window.setTimeout(() => {
         if (!cancelled) {
@@ -488,15 +433,19 @@ export default function GoogleTranslate() {
           undefined;
       }
 
+      /*
+       * Restore the original browser DOM methods.
+       */
+
+      Node.prototype.removeChild =
+        originalRemoveChild;
+
+      Node.prototype.insertBefore =
+        originalInsertBefore;
+
       style.remove();
     };
   }, []);
-
-  /*
-   * Google's actual widget exists here.
-   *
-   * It is invisible, but JavaScript can still control it.
-   */
 
   return (
     <div

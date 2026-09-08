@@ -239,21 +239,33 @@ export default function HousingPage() {
 
       <div className="mx-auto max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
         {/* HERO */}
-        <section className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-orange-500 via-orange-500 to-red-500 p-7 text-white shadow-xl sm:p-10">
-          <div className="max-w-3xl">
-            <span className="inline-flex rounded-full bg-white/15 px-4 py-2 text-sm font-semibold backdrop-blur">
-              🏠 Housing in the Netherlands
-            </span>
+        <section className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-orange-500 via-orange-500 to-red-500 text-white shadow-xl">
+          <div className="grid lg:grid-cols-2">
+            <div className="p-7 sm:p-10">
+              <div className="max-w-3xl">
+                <span className="inline-flex rounded-full bg-white/15 px-4 py-2 text-sm font-semibold backdrop-blur">
+                  🏠 Housing in the Netherlands
+                </span>
 
-            <h1 className="mt-5 text-4xl font-black leading-tight sm:text-5xl">
-              Find a home and understand what comes next
-            </h1>
+                <h1 className="mt-5 text-4xl font-black leading-tight sm:text-5xl">
+                  Find a home and understand what comes next
+                </h1>
 
-            <p className="mt-4 max-w-2xl text-base leading-7 text-orange-50 sm:text-lg">
-              From finding a room or apartment to signing a contract,
-              paying your bills and moving in — this guide explains the
-              whole process in simple steps.
-            </p>
+                <p className="mt-4 max-w-2xl text-base leading-7 text-orange-50 sm:text-lg">
+                  From finding a room or apartment to signing a contract,
+                  paying your bills and moving in — this guide explains the
+                  whole process in simple steps.
+                </p>
+              </div>
+            </div>
+
+            <div className="relative min-h-[280px] lg:min-h-full">
+              <img
+                src="/images/housing/housing.jpg"
+                alt="Housing in the Netherlands"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            </div>
           </div>
         </section>
 
@@ -640,9 +652,7 @@ export default function HousingPage() {
           </div>
 
           <div className="mt-6 rounded-2xl bg-blue-50 p-5">
-            <p className="font-bold text-blue-950">
-              💡 Tip
-            </p>
+            <p className="font-bold text-blue-950">💡 Tip</p>
 
             <p className="mt-1 text-sm leading-6 text-blue-900/70">
               Keep your bills and payment confirmations. If you do not

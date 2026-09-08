@@ -125,6 +125,20 @@ function getStatus(
   return selectedDocuments.includes(id) ? "yes" : "no";
 }
 
+function getDocumentImage(id: string): string {
+  const images: Record<string, string> = {
+    bsn: "/images/documents/bsn/bsn.jpg",
+    digid: "/images/documents/digid/digid.jpg",
+    residence:
+      "/images/documents/residence-permit/residence-permit.jpg",
+    municipality:
+      "/images/documents/municipality/municipality.jpg",
+    letters: "/images/documents/letters/letters.jpg",
+  };
+
+  return images[id];
+}
+
 export default function DocumentsPage() {
   const router = useRouter();
 
@@ -228,56 +242,70 @@ export default function DocumentsPage() {
                 onClick={() =>
                   router.push(`/guide?topic=${id}`)
                 }
-                className={`rounded-3xl border p-6 text-left transition hover:-translate-y-0.5 hover:shadow-md ${
+                className={`overflow-hidden rounded-3xl border text-left transition hover:-translate-y-0.5 hover:shadow-md ${
                   hasDocument
                     ? "border-green-200 bg-green-50"
                     : "border-orange-200 bg-white"
                 }`}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="text-5xl">
-                    {id === "bsn" && "🔢"}
-                    {id === "digid" && "🪪"}
-                    {id === "residence" && "🛂"}
-                    {id === "municipality" && "🏛️"}
-                    {id === "letters" && "📬"}
+                {/* DOCUMENT IMAGE */}
+                <div className="relative h-52 w-full overflow-hidden bg-slate-100">
+                  <img
+                    src={getDocumentImage(id)}
+                    alt={document.title}
+                    className="h-full w-full object-cover"
+                  />
+
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+                </div>
+
+                {/* CARD CONTENT */}
+                <div className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="text-5xl">
+                      {id === "bsn" && "🔢"}
+                      {id === "digid" && "🪪"}
+                      {id === "residence" && "🛂"}
+                      {id === "municipality" && "🏛️"}
+                      {id === "letters" && "📬"}
+                    </div>
+
+                    <div
+                      className={`rounded-full px-3 py-1 text-xs font-bold ${
+                        hasDocument
+                          ? "bg-green-100 text-green-700"
+                          : "bg-orange-100 text-orange-700"
+                      }`}
+                    >
+                      {hasDocument
+                        ? t.done
+                        : t.actionNeeded}
+                    </div>
                   </div>
 
+                  <h2 className="mt-5 text-2xl font-bold">
+                    {document.title}
+                  </h2>
+
+                  <p className="mt-2 leading-relaxed text-slate-600">
+                    {document.description}
+                  </p>
+
                   <div
-                    className={`rounded-full px-3 py-1 text-xs font-bold ${
+                    className={`mt-5 rounded-2xl p-4 font-semibold ${
                       hasDocument
-                        ? "bg-green-100 text-green-700"
-                        : "bg-orange-100 text-orange-700"
+                        ? "bg-white text-green-700"
+                        : "bg-orange-500 text-white"
                     }`}
                   >
                     {hasDocument
-                      ? t.done
-                      : t.actionNeeded}
+                      ? `✅ ${document.yes}`
+                      : `→ ${document.no}`}
                   </div>
-                </div>
 
-                <h2 className="mt-5 text-2xl font-bold">
-                  {document.title}
-                </h2>
-
-                <p className="mt-2 leading-relaxed text-slate-600">
-                  {document.description}
-                </p>
-
-                <div
-                  className={`mt-5 rounded-2xl p-4 font-semibold ${
-                    hasDocument
-                      ? "bg-white text-green-700"
-                      : "bg-orange-500 text-white"
-                  }`}
-                >
-                  {hasDocument
-                    ? `✅ ${document.yes}`
-                    : `→ ${document.no}`}
-                </div>
-
-                <div className="mt-4 text-sm font-semibold text-slate-500">
-                  {t.openGuide}
+                  <div className="mt-4 text-sm font-semibold text-slate-500">
+                    {t.openGuide}
+                  </div>
                 </div>
               </button>
             );
