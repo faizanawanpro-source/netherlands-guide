@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -119,14 +118,13 @@ export async function GET(request: Request) {
 
     if (!expectedSecret) {
       console.error(
-        "CRON_SECRET and REMINDER_SECRET are both missing."
+        "Reminder job cannot run because no cron secret is configured."
       );
 
       return NextResponse.json(
         {
-          error: "Cron secret is not configured",
-          hasCronSecret: Boolean(cronSecret),
-          hasReminderSecret: Boolean(reminderSecret),
+          success: false,
+          error: "Reminder service is not configured.",
         },
         {
           status: 500,
@@ -137,10 +135,8 @@ export async function GET(request: Request) {
     if (authHeader !== `Bearer ${expectedSecret}`) {
       return NextResponse.json(
         {
-          error: "Unauthorized",
-          hasCronSecret: Boolean(cronSecret),
-          hasReminderSecret: Boolean(reminderSecret),
-          authorizationHeaderExists: Boolean(authHeader),
+          success: false,
+          error: "Unauthorized.",
         },
         {
           status: 401,
@@ -162,23 +158,13 @@ export async function GET(request: Request) {
 
     if (!supabaseUrl || !supabaseSecretKey) {
       console.error(
-        "Supabase configuration check:",
-        {
-          hasSupabaseUrl: Boolean(supabaseUrl),
-          hasSupabaseSecretKey: Boolean(
-            supabaseSecretKey
-          ),
-        }
+        "Reminder job cannot run because Supabase server configuration is missing."
       );
 
       return NextResponse.json(
         {
-          error:
-            "Supabase server configuration is missing",
-          hasSupabaseUrl: Boolean(supabaseUrl),
-          hasSupabaseSecretKey: Boolean(
-            supabaseSecretKey
-          ),
+          success: false,
+          error: "Reminder service is not configured.",
         },
         {
           status: 500,
@@ -665,7 +651,7 @@ export async function GET(request: Request) {
         error:
           error instanceof Error
             ? error.message
-            : "Reminder job failed",
+            : "Reminder job failed.",
       },
       {
         status: 500,
