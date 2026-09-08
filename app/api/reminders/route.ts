@@ -57,10 +57,6 @@ function getReminderType(
   }
 
   if (daysUntil === 0) {
-    if (itemType === "appointment") {
-      return "due_today";
-    }
-
     return "due_today";
   }
 
@@ -121,12 +117,6 @@ export async function GET(request: Request) {
      * ------------------------------------------------------------
      * SECURITY
      * ------------------------------------------------------------
-     *
-     * Vercel Cron sends:
-     *
-     * Authorization: Bearer <CRON_SECRET>
-     *
-     * We also keep REMINDER_SECRET as a fallback for local testing.
      */
 
     const authHeader = request.headers.get("authorization");
@@ -163,7 +153,7 @@ export async function GET(request: Request) {
 
     /*
      * ------------------------------------------------------------
-     * SUPABASE
+     * SUPABASE CONFIGURATION
      * ------------------------------------------------------------
      */
 
@@ -173,20 +163,44 @@ export async function GET(request: Request) {
     const supabaseSecretKey =
       process.env.SUPABASE_SECRET_KEY;
 
+    /*
+     * TEMPORARY DEBUGGING
+     *
+     * This only returns true/false.
+     * It NEVER returns the actual URL or secret key.
+     */
+
     if (!supabaseUrl || !supabaseSecretKey) {
       console.error(
-        "Supabase environment variables are missing."
+        "Supabase configuration check:",
+        {
+          hasSupabaseUrl: Boolean(supabaseUrl),
+          hasSupabaseSecretKey: Boolean(
+            supabaseSecretKey
+          ),
+        }
       );
 
       return NextResponse.json(
         {
-          error: "Supabase server configuration is missing",
+          error:
+            "Supabase server configuration is missing",
+          hasSupabaseUrl: Boolean(supabaseUrl),
+          hasSupabaseSecretKey: Boolean(
+            supabaseSecretKey
+          ),
         },
         {
           status: 500,
         }
       );
     }
+
+    /*
+     * ------------------------------------------------------------
+     * SUPABASE ADMIN CLIENT
+     * ------------------------------------------------------------
+     */
 
     const supabaseAdmin = createClient(
       supabaseUrl,
@@ -342,17 +356,16 @@ export async function GET(request: Request) {
         throw notificationError;
       }
 
-      const {
-        error: logError,
-      } = await supabaseAdmin
-        .from("reminder_logs")
-        .insert({
-          user_id: payment.user_id,
-          item_type: "payment",
-          item_id: payment.id,
-          reminder_type: reminderType,
-          notification_id: notification.id,
-        });
+      const { error: logError } =
+        await supabaseAdmin
+          .from("reminder_logs")
+          .insert({
+            user_id: payment.user_id,
+            item_type: "payment",
+            item_id: payment.id,
+            reminder_type: reminderType,
+            notification_id: notification.id,
+          });
 
       if (logError) {
         throw logError;
@@ -379,11 +392,7 @@ export async function GET(request: Request) {
           deadline_date,
           description,
           importance,
-          completed,
-          deadline_type,
-          relative_description,
-          received_date,
-          calculated_deadline_date
+          completed
         `
       )
       .eq("completed", false)
@@ -489,17 +498,16 @@ export async function GET(request: Request) {
         throw notificationError;
       }
 
-      const {
-        error: logError,
-      } = await supabaseAdmin
-        .from("reminder_logs")
-        .insert({
-          user_id: deadline.user_id,
-          item_type: "deadline",
-          item_id: deadline.id,
-          reminder_type: reminderType,
-          notification_id: notification.id,
-        });
+      const { error: logError } =
+        await supabaseAdmin
+          .from("reminder_logs")
+          .insert({
+            user_id: deadline.user_id,
+            item_type: "deadline",
+            item_id: deadline.id,
+            reminder_type: reminderType,
+            notification_id: notification.id,
+          });
 
       if (logError) {
         throw logError;
@@ -551,12 +559,6 @@ export async function GET(request: Request) {
         appointmentDateKey,
         today
       );
-
-      /*
-       * Appointments only receive:
-       * - 1 day before
-       * - today
-       */
 
       if (daysUntil !== 1 && daysUntil !== 0) {
         continue;
@@ -653,17 +655,16 @@ export async function GET(request: Request) {
         throw notificationError;
       }
 
-      const {
-        error: logError,
-      } = await supabaseAdmin
-        .from("reminder_logs")
-        .insert({
-          user_id: appointment.user_id,
-          item_type: "appointment",
-          item_id: appointment.id,
-          reminder_type: reminderType,
-          notification_id: notification.id,
-        });
+      const { error: logError } =
+        await supabaseAdmin
+          .from("reminder_logs")
+          .insert({
+            user_id: appointment.user_id,
+            item_type: "appointment",
+            item_id: appointment.id,
+            reminder_type: reminderType,
+            notification_id: notification.id,
+          });
 
       if (logError) {
         throw logError;
@@ -674,7 +675,7 @@ export async function GET(request: Request) {
 
     /*
      * ------------------------------------------------------------
-     * RESPONSE
+     * SUCCESS
      * ------------------------------------------------------------
      */
 
