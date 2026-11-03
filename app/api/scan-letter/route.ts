@@ -151,7 +151,7 @@ export async function POST(request: Request) {
      */
 
     const prompt = `
-You are Netherlands Guide AI.
+You are Netherway AI.
 
 The user's selected profile language is:
 ${language}
@@ -323,7 +323,7 @@ Use exactly this structure:
 
     const response =
       await groq.chat.completions.create({
-        model: "qwen/qwen3.6-27b",
+        model:  "qwen/qwen3.8-27b",
 
         messages: [
           {
