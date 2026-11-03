@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -13,7 +14,6 @@ export default function DutchPhoneNumberPage() {
             className="flex items-center gap-3 rounded-xl px-3 py-2 transition hover:bg-slate-100"
           >
             <span className="text-2xl">←</span>
-
             <div>
               <p className="font-black">Home</p>
               <p className="text-xs text-slate-500">
@@ -29,13 +29,48 @@ export default function DutchPhoneNumberPage() {
       </nav>
 
       <div className="mx-auto max-w-6xl px-5 py-8 sm:py-10">
-        {/* HERO IMAGE */}
+        {/* HERO */}
         <section className="overflow-hidden rounded-[2rem] bg-white shadow-xl">
-          <img
-            src="/images/phone.jpg"
-            alt="Dutch mobile phone and SIM card"
-            className="block h-64 w-full object-cover sm:h-96"
-          />
+          {/* Phone visual — no external image required */}
+          <div className="relative flex h-64 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-sky-100 via-blue-50 to-orange-100 sm:h-96">
+            <div className="absolute -left-10 -top-12 h-48 w-48 rounded-full bg-orange-200/50 blur-2xl" />
+            <div className="absolute -bottom-16 -right-8 h-56 w-56 rounded-full bg-sky-200/60 blur-2xl" />
+
+            <div className="relative flex items-center gap-6 sm:gap-12">
+              {/* Smartphone */}
+              <div className="relative flex h-40 w-24 rotate-[-6deg] items-center justify-center rounded-[1.8rem] border-[5px] border-slate-800 bg-slate-900 p-2 shadow-2xl sm:h-56 sm:w-32">
+                <div className="flex h-full w-full flex-col items-center justify-center rounded-[1.2rem] bg-gradient-to-br from-blue-500 to-indigo-700 text-white">
+                  <span className="text-3xl sm:text-5xl">📱</span>
+                  <span className="mt-3 text-xs font-bold sm:text-sm">
+                    +31
+                  </span>
+                  <div className="mt-3 h-1 w-8 rounded-full bg-white/70" />
+                </div>
+                <div className="absolute top-1 h-2 w-8 rounded-full bg-slate-800" />
+              </div>
+
+              {/* SIM card */}
+              <div className="flex h-24 w-24 rotate-[8deg] flex-col items-center justify-center rounded-2xl border border-amber-400 bg-gradient-to-br from-yellow-200 to-amber-400 shadow-xl sm:h-32 sm:w-32">
+                <div className="mb-2 h-10 w-10 rounded-lg border-2 border-amber-700/60 bg-amber-300 sm:h-14 sm:w-14">
+                  <div className="grid h-full grid-cols-2 grid-rows-2">
+                    <div className="border-b border-r border-amber-700/50" />
+                    <div className="border-b border-amber-700/50" />
+                    <div className="border-r border-amber-700/50" />
+                    <div />
+                  </div>
+                </div>
+                <span className="text-xs font-black tracking-widest text-amber-950">
+                  SIM
+                </span>
+              </div>
+            </div>
+
+            <div className="absolute bottom-4 right-4 rounded-2xl border border-white/80 bg-white/90 px-4 py-2 shadow-md backdrop-blur">
+              <span className="font-black text-slate-800">
+                🇳🇱 Netherlands
+              </span>
+            </div>
+          </div>
 
           <div className="bg-gradient-to-br from-orange-500 via-orange-500 to-red-500 p-8 text-white sm:p-10">
             <div className="text-4xl">📱</div>
