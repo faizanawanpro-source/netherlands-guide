@@ -19,7 +19,7 @@ export const languages = [
 
 export const translations = {
   en: {
-    guide: "Netherlands Guide",
+    guide: "Netherway",
     assistant: "Your personalised assistant in the Netherlands",
     edit: "Edit profile",
     greeting: "Let's make life in the Netherlands easier.",
@@ -160,7 +160,7 @@ export const translations = {
   },
 
   nl: {
-    guide: "Nederland Gids",
+    guide: "Netherway",
     assistant: "Uw persoonlijke assistent in Nederland",
     edit: "Profiel bewerken",
     greeting: "Laten we het leven in Nederland gemakkelijker maken.",
@@ -250,7 +250,7 @@ export const translations = {
   },
 
   ur: {
-    guide: "نیدرلینڈز گائیڈ",
+    guide: "Netherway",
     assistant: "نیدرلینڈز میں آپ کا ذاتی معاون",
     edit: "پروفائل میں ترمیم کریں",
     greeting: "آئیے نیدرلینڈز میں زندگی کو آسان بنائیں۔",
@@ -335,7 +335,7 @@ export const translations = {
   },
 
   ar: {
-    guide: "دليل هولندا",
+    guide: "Netherway",
     assistant: "مساعدك الشخصي في هولندا",
     edit: "تعديل الملف الشخصي",
     greeting: "لنجعل الحياة في هولندا أسهل.",
@@ -420,7 +420,7 @@ export const translations = {
   },
 
   ru: {
-    guide: "Гид по Нидерландам",
+    guide: "Netherway",
     assistant: "Ваш персональный помощник в Нидерландах",
     edit: "Редактировать профиль",
     greeting: "Давайте сделаем жизнь в Нидерландах проще.",
@@ -505,7 +505,7 @@ export const translations = {
   },
 
   pt: {
-    guide: "Guia dos Países Baixos",
+    guide: "Netherway",
     assistant: "O seu assistente personalizado nos Países Baixos",
     edit: "Editar perfil",
     greeting: "Vamos tornar a vida nos Países Baixos mais fácil.",
@@ -590,7 +590,7 @@ export const translations = {
   },
 
   zh: {
-    guide: "荷兰指南",
+    guide: "Netherway",
     assistant: "您的荷兰个性化助手",
     edit: "编辑个人资料",
     greeting: "让我们让在荷兰的生活变得更简单。",

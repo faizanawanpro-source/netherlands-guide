@@ -702,9 +702,12 @@ export default function DashboardPage() {
             href="/dashboard"
             className="group flex items-center gap-3"
           >
-            <div className="relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-blue-400 via-indigo-500 to-violet-600 text-xl shadow-[0_8px_30px_rgba(79,70,229,0.35)]">
-              <span className="relative z-10">🇳🇱</span>
-              <div className="absolute inset-0 bg-white/10 opacity-0 transition group-hover:opacity-100" />
+            <div className="relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl border border-amber-300/40 bg-[#07111f] shadow-[0_8px_30px_rgba(212,175,55,0.22)]">
+              <img
+                src="/netherway-icon.png"
+                alt="Netherway"
+                className="h-full w-full object-contain"
+              />
             </div>
 
             <div>
