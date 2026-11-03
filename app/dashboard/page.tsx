@@ -692,11 +692,11 @@ export default function DashboardPage() {
   return (
     <main
       dir={isRTL ? "rtl" : "ltr"}
-      className="min-h-screen bg-[#f4f7fb] pb-28 text-slate-950"
+      className="min-h-screen bg-[#f4f7fb] pb-28 pt-[77px] text-slate-950"
     >
       {/* HEADER */}
 
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#07111f]/95 text-white shadow-[0_10px_40px_rgba(2,8,23,0.15)] backdrop-blur-2xl">
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#07111f]/95 text-white shadow-[0_10px_40px_rgba(2,8,23,0.15)] backdrop-blur-2xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-7">
           <Link
             href="/dashboard"
