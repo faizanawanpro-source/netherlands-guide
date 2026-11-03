@@ -119,7 +119,7 @@ export default function HealthcarePage() {
             </div>
 
             <div className="hidden sm:block">
-              <p className="font-bold">Netherlands Guide</p>
+              <p className="font-bold">Netherway</p>
               <p className="text-xs text-slate-500">
                 Your guide to life in the Netherlands
               </p>
@@ -244,7 +244,7 @@ export default function HealthcarePage() {
                   ⚠️ Important
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-300">
-                  Netherlands Guide should not replace emergency medical
+                  Netherway should not replace emergency medical
                   advice. If you think someone's life is in danger, call
                   112.
                 </p>
@@ -623,7 +623,7 @@ export default function HealthcarePage() {
         {/* DISCLAIMER */}
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
           <p className="text-xs leading-5 text-slate-500">
-            <strong>Important:</strong> Netherlands Guide provides
+            <strong>Important:</strong> Netherway provides
             general educational information and does not diagnose,
             prescribe treatment or replace professional medical advice.
             In an emergency or life-threatening situation, call 112.
@@ -642,7 +642,7 @@ export default function HealthcarePage() {
         </div>
 
         <footer className="py-10 text-center text-sm text-slate-400">
-          Netherlands Guide 🇳🇱 · Making life in the Netherlands easier
+          Netherway 🇳🇱 · Making life in the Netherlands easier
         </footer>
       </div>
     </main>

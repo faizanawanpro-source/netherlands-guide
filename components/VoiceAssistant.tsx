@@ -2812,7 +2812,7 @@ Do not switch to English unless the user specifically asks for English.
                           "navigate_to_page",
 
                         description: `
-Navigate the user to the correct Netherlands Guide page when they clearly need information from one of the available sections.
+Navigate the user to the correct Netherway page when they clearly need information from one of the available sections.
 
 IMPORTANT:
 The user can speak ANY language.

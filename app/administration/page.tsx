@@ -1101,7 +1101,7 @@ export default function AdministrationPage() {
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-purple-200">
-                Netherlands Guide AI
+                Netherway AI
               </p>
 
               <h1 className="text-4xl font-bold tracking-tight md:text-5xl">
@@ -1891,7 +1891,7 @@ export default function AdministrationPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Letters you have scanned with Netherlands Guide.
+                  Letters you have scanned with Netherway.
                 </p>
               </div>
 
@@ -2017,7 +2017,7 @@ export default function AdministrationPage() {
               <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-widest text-purple-200">
-                    Netherlands Guide AI
+                    Netherway AI
                   </p>
 
                   <h2 className="mt-2 text-2xl font-bold">
@@ -2025,7 +2025,7 @@ export default function AdministrationPage() {
                   </h2>
 
                   <p className="mt-2 max-w-xl text-purple-100">
-                    Scan it and let Netherlands Guide explain what it means and what you need to do.
+                    Scan it and let Netherway explain what it means and what you need to do.
                   </p>
                 </div>
 

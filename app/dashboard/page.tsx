@@ -1050,7 +1050,7 @@ export default function DashboardPage() {
 
                     <div className="mt-8">
                       <p className="mb-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/45">
-                        Netherlands Guide
+                        Netherway
                       </p>
 
                       <h3 className="text-lg font-black tracking-tight sm:text-xl">

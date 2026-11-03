@@ -659,7 +659,7 @@ export default function WhatDoIDoPage() {
 
               <div>
                 <p className="font-bold">
-                  Netherlands Guide
+                  Netherway
                 </p>
 
                 <p className="hidden text-xs text-slate-500 sm:block">
@@ -1088,7 +1088,7 @@ export default function WhatDoIDoPage() {
         </div>
 
         <footer className="py-10 text-center text-sm text-slate-400">
-          Netherlands Guide 🇳🇱 · Helping you know what to do
+          Netherway 🇳🇱 · Helping you know what to do
         </footer>
 
       </div>

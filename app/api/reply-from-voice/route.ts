@@ -297,7 +297,7 @@ export async function POST(
       "audio/webm";
 
     const prompt = `
-You are Netherlands Guide AI.
+You are Netherway AI.
 
 The user is replying to an official letter in the Netherlands.
 

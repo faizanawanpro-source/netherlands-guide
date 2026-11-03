@@ -734,7 +734,7 @@ export default function VoicePage() {
           </button>
 
           <div className="font-black">
-            🇳🇱 Netherlands Guide
+            🇳🇱 Netherway
           </div>
         </div>
       </header>
@@ -867,7 +867,7 @@ export default function VoicePage() {
         {reply && (
           <div className="mt-4 w-full rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5">
             <p className="text-xs font-black uppercase tracking-wider text-orange-400">
-              Netherlands Guide
+              Netherway
             </p>
 
             <p className="mt-2 leading-7 text-slate-200">

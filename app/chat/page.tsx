@@ -22,7 +22,7 @@ export default function ChatPage() {
     {
       role: "assistant",
       content:
-        "Hi! 👋 I'm Netherlands Guide AI. Ask me anything about living, studying, working or travelling in the Netherlands.",
+        "Hi! 👋 I'm Netherway AI. Ask me anything about living, studying, working or travelling in the Netherlands.",
     },
   ]);
 
@@ -105,7 +105,7 @@ export default function ChatPage() {
         {
           role: "assistant",
           content:
-            "Sorry, I couldn't connect to Netherlands Guide AI right now. Please try again.",
+            "Sorry, I couldn't connect to Netherway AI right now. Please try again.",
         },
       ]);
     } finally {
@@ -147,7 +147,7 @@ export default function ChatPage() {
 
           <div>
             <h1 className="font-black">
-              Netherlands Guide
+              Netherway
             </h1>
 
             <p className="text-xs text-slate-500">
@@ -167,7 +167,7 @@ export default function ChatPage() {
         <div className="mb-6">
 
           <h2 className="text-3xl font-black text-slate-900">
-            Ask Netherlands Guide
+            Ask Netherway
           </h2>
 
           <p className="mt-2 text-slate-500">
@@ -202,7 +202,7 @@ export default function ChatPage() {
 
                 {message.role === "assistant" && (
                   <div className="mb-1 text-xs font-black uppercase tracking-wide text-indigo-600">
-                    🤖 Netherlands Guide AI
+                    🤖 Netherway AI
                   </div>
                 )}
 

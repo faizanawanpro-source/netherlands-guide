@@ -497,7 +497,7 @@ export default function OnboardingPage() {
             <div>
 
               <h1 className="font-bold">
-                Netherlands Guide
+                Netherway
               </h1>
 
               <p className="text-xs text-slate-500">

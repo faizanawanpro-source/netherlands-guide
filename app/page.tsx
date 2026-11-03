@@ -37,7 +37,7 @@ export default function Home() {
           </div>
 
           <p className="font-medium text-slate-500">
-            Loading Netherlands Guide...
+            Loading Netherway...
           </p>
         </div>
       </main>
@@ -53,7 +53,7 @@ export default function Home() {
         </div>
 
         <h1 className="mb-6 text-5xl font-bold text-gray-900">
-          Netherlands Guide
+          Netherway
         </h1>
 
         <p className="mb-8 text-xl text-gray-600">

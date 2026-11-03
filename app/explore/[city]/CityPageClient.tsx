@@ -319,7 +319,7 @@ export default function CityPage() {
           </Link>
 
           <Link href="/dashboard" className="font-black">
-            🇳🇱 Netherlands Guide
+            🇳🇱 Netherway
           </Link>
         </div>
       </header>
@@ -402,7 +402,7 @@ export default function CityPage() {
       </section>
 
       <footer className="border-t border-slate-200 bg-white py-8 text-center text-sm text-slate-400">
-        Netherlands Guide · Explore the Netherlands
+        Netherway · Explore the Netherlands
       </footer>
     </main>
   );

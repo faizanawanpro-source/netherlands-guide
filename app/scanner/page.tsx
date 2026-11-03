@@ -84,7 +84,7 @@ const languageMap: Record<string, string> = {
  *
  * Looks at the information already understood by
  * the AI scanner and suggests relevant sections
- * inside Netherlands Guide.
+ * inside Netherway.
  *
  * This does NOT change the AI scan itself.
  */
@@ -1864,7 +1864,7 @@ export default function ScannerPage() {
               </p>
 
               <p className="hidden text-xs font-normal text-slate-500 sm:block">
-                Netherlands Guide
+                Netherway
               </p>
             </div>
           </Link>
@@ -1882,7 +1882,7 @@ export default function ScannerPage() {
           </h1>
 
           <p className="mt-4 max-w-2xl text-base leading-7 text-white/90 sm:text-lg">
-            Upload a Dutch letter and Netherlands Guide will explain what it means, what you need to do, deadlines, payments and important next steps.
+            Upload a Dutch letter and Netherway will explain what it means, what you need to do, deadlines, payments and important next steps.
           </p>
         </section>
 
@@ -1991,7 +1991,7 @@ export default function ScannerPage() {
 
                   <div>
                     <p className="text-xs font-black uppercase tracking-wider text-purple-600">
-                      Netherlands Guide AI
+                      Netherway AI
                     </p>
 
                     <h2 className="text-2xl font-black">
@@ -2358,7 +2358,7 @@ export default function ScannerPage() {
 
                 <p className="mt-2 leading-7 text-violet-950">
                   Based on this letter, these parts
-                  of Netherlands Guide may be useful
+                  of Netherway may be useful
                   for you.
                 </p>
 
@@ -2449,7 +2449,7 @@ export default function ScannerPage() {
             </div>
 
             <p className="mt-5 leading-7 text-slate-600">
-              Netherlands Guide found an existing letter in your administration that looks very similar to this one.
+              Netherway found an existing letter in your administration that looks very similar to this one.
             </p>
 
             {duplicateReason && (

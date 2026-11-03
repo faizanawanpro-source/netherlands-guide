@@ -169,7 +169,7 @@ function DigiDGuide() {
                     <button
                       onClick={() =>
                         askAI(
-                          `I am on the DigiD guide in the Netherlands Guide app. The question is: "${currentQuestion.question}". Explain this question to me in very simple English, give me a real-life example, and tell me what I should look for before answering. Do not ask for passwords, PINs or other secret information.`
+                          `I am on the DigiD guide in the Netherway app. The question is: "${currentQuestion.question}". Explain this question to me in very simple English, give me a real-life example, and tell me what I should look for before answering. Do not ask for passwords, PINs or other secret information.`
                         )
                       }
                       className="mt-4 bg-purple-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-purple-700 transition"

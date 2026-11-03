@@ -52,7 +52,7 @@ export async function POST(
     }
 
     const prompt = `
-You are Netherlands Guide AI.
+You are Netherway AI.
 
 A user received a Dutch letter.
 

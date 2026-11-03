@@ -586,7 +586,7 @@ export default function VehiclesPage() {
 
             <div>
               <p className="font-bold">
-                Netherlands Guide
+                Netherway
               </p>
 
               <p className="hidden text-xs text-slate-500 sm:block">
@@ -927,7 +927,7 @@ export default function VehiclesPage() {
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-indigo-800">
-                  Tell the Netherlands Guide AI your country,
+                  Tell the Netherway AI your country,
                   licence type, vehicle or situation and get a
                   simple explanation.
                 </p>
@@ -958,7 +958,7 @@ export default function VehiclesPage() {
         </div>
 
         <footer className="py-10 text-center text-sm text-slate-400">
-          Netherlands Guide 🇳🇱 · Making driving in the Netherlands easier
+          Netherway 🇳🇱 · Making driving in the Netherlands easier
         </footer>
 
       </div>

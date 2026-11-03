@@ -85,7 +85,7 @@ export async function POST(request: Request) {
           `${
             item.role === "user"
               ? "User"
-              : "Netherlands Guide AI"
+              : "Netherway AI"
           }: ${item.content}`
       )
       .join("\n");
@@ -95,10 +95,10 @@ export async function POST(request: Request) {
     // ============================================================
 
     const systemPrompt = `
-You are Netherlands Guide AI.
+You are Netherway AI.
 
 You are a friendly conversational assistant built specifically
-for an application called "Netherlands Guide".
+for an application called "Netherway".
 
 Your purpose is to help people understand and navigate
 life, travel, study, work and government-related matters
@@ -156,7 +156,7 @@ IMPORTANT — DO NOT RANDOMLY ANSWER UNRELATED QUESTIONS
 ============================================================
 
 If the user's message appears to be about something completely
-unrelated to the Netherlands Guide, DO NOT suddenly become a
+unrelated to the Netherway, DO NOT suddenly become a
 general tutor.
 
 For example, if speech recognition incorrectly turns the user's
@@ -555,7 +555,7 @@ ${conversationText}
       {
         error:
           error?.message ||
-          "Netherlands Guide AI could not respond right now.",
+          "Netherway AI could not respond right now.",
       },
       { status: 500 }
     );

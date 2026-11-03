@@ -92,7 +92,7 @@ export default function TransportPage() {
           </button>
 
           <div className="ml-auto">
-            <p className="font-bold">Netherlands Guide</p>
+            <p className="font-bold">Netherway</p>
             <p className="text-xs text-slate-500">
               Your guide to life in the Netherlands
             </p>
@@ -702,7 +702,7 @@ export default function TransportPage() {
 
       {/* FOOTER */}
       <footer className="border-t border-slate-200 bg-white py-8 text-center text-sm text-slate-400">
-        Netherlands Guide · Making life in the Netherlands easier
+        Netherway · Making life in the Netherlands easier
       </footer>
 
     </main>

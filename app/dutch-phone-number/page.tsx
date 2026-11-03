@@ -17,7 +17,7 @@ export default function DutchPhoneNumberPage() {
             <div>
               <p className="font-black">Home</p>
               <p className="text-xs text-slate-500">
-                Netherlands Guide
+                Netherway
               </p>
             </div>
           </Link>
@@ -219,7 +219,7 @@ export default function DutchPhoneNumberPage() {
               </h2>
 
               <p className="mt-3 max-w-2xl leading-7 text-white/80">
-                Ask Netherlands Guide AI about SIM cards,
+                Ask Netherway AI about SIM cards,
                 providers, subscriptions or your own situation.
               </p>
             </div>
@@ -234,7 +234,7 @@ export default function DutchPhoneNumberPage() {
         </section>
 
         <footer className="py-10 text-center text-sm text-slate-400">
-          Netherlands Guide 🇳🇱
+          Netherway 🇳🇱
           <span className="mx-2">·</span>
           Making life in the Netherlands easier
         </footer>

@@ -652,7 +652,7 @@ export default function ExplorePage() {
             </div>
 
             <div className="hidden sm:block">
-              <p className="font-black">Netherlands Guide</p>
+              <p className="font-black">Netherway</p>
               <p className="text-xs text-slate-500">
                 Explore the Netherlands
               </p>
@@ -874,7 +874,7 @@ export default function ExplorePage() {
             </h2>
 
             <p className="mt-4 text-sm leading-7 text-indigo-100 sm:text-base">
-              Tell Netherlands Guide where you are going, how many
+              Tell Netherway where you are going, how many
               days you have, your budget and what you like. The AI
               will create a personalised itinerary for you.
             </p>
@@ -891,7 +891,7 @@ export default function ExplorePage() {
 
       {/* FOOTER */}
       <footer className="border-t border-slate-200 bg-white py-8 text-center text-sm text-slate-400">
-        Netherlands Guide 🇳🇱 · Explore more, experience more
+        Netherway 🇳🇱 · Explore more, experience more
       </footer>
     </main>
   );

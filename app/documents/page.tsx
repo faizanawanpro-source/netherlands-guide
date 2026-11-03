@@ -42,7 +42,7 @@ type Translation = {
 };
 
 const t: Translation = {
-  guide: "Netherlands Guide",
+  guide: "Netherway",
   assistant: "Your guide to life in the Netherlands",
   back: "← Back to Dashboard",
   yourDocuments: "Your documents",

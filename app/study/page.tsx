@@ -136,7 +136,7 @@ export default function StudyPage() {
 
             <div className="hidden sm:block">
               <p className="font-bold">
-                Netherlands Guide
+                Netherway
               </p>
 
               <p className="text-xs text-slate-500">
@@ -1282,7 +1282,7 @@ export default function StudyPage() {
         </div>
 
         <footer className="py-10 text-center text-sm text-slate-400">
-          Netherlands Guide 🇳🇱 · Making education easier to understand
+          Netherway 🇳🇱 · Making education easier to understand
         </footer>
 
       </div>

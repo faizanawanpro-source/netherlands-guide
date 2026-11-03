@@ -64,7 +64,7 @@ export default function PlanDayPage() {
             </div>
 
             <div className="hidden sm:block">
-              <p className="font-black">Netherlands Guide</p>
+              <p className="font-black">Netherway</p>
               <p className="text-xs text-slate-500">
                 Your personal travel guide
               </p>
@@ -86,7 +86,7 @@ export default function PlanDayPage() {
 
           <p className="mt-4 max-w-2xl text-base leading-7 text-orange-50 sm:text-lg">
             Tell us where you are going, how much time you have and what
-            you enjoy. Netherlands Guide will build a simple day plan.
+            you enjoy. Netherway will build a simple day plan.
           </p>
         </div>
 
@@ -339,7 +339,7 @@ export default function PlanDayPage() {
               </p>
 
               <p className="mt-1 text-sm text-slate-300">
-                Later, Netherlands Guide will use AI to create a
+                Later, Netherway will use AI to create a
                 personalised itinerary using your exact interests,
                 budget and available time.
               </p>
@@ -367,7 +367,7 @@ export default function PlanDayPage() {
 
       {/* FOOTER */}
       <footer className="border-t border-slate-200 bg-white py-8 text-center text-sm text-slate-400">
-        Netherlands Guide 🇳🇱 · Your personal travel guide
+        Netherway 🇳🇱 · Your personal travel guide
       </footer>
     </main>
   );

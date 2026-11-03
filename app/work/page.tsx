@@ -136,7 +136,7 @@ export default function WorkPage() {
 
             <div className="hidden sm:block">
               <p className="font-bold">
-                Netherlands Guide
+                Netherway
               </p>
 
               <p className="text-xs text-slate-500">
@@ -892,7 +892,7 @@ export default function WorkPage() {
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
 
           <p className="text-xs leading-5 text-slate-500">
-            <strong>Important:</strong> Netherlands Guide provides
+            <strong>Important:</strong> Netherway provides
             general educational information. Employment rights can depend
             on your contract, collective labour agreement, personal
             situation and current Dutch law. Check official sources for
@@ -916,7 +916,7 @@ export default function WorkPage() {
         </div>
 
         <footer className="py-10 text-center text-sm text-slate-400">
-          Netherlands Guide 🇳🇱 · Making work in the Netherlands easier
+          Netherway 🇳🇱 · Making work in the Netherlands easier
         </footer>
 
       </div>

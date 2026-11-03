@@ -101,7 +101,7 @@ export default function TripPlannerPage() {
 
             <div className="hidden sm:block">
               <p className="font-black">
-                Netherlands Guide
+                Netherway
               </p>
 
               <p className="text-xs text-slate-500">
@@ -407,7 +407,7 @@ export default function TripPlannerPage() {
 
       {/* FOOTER */}
       <footer className="border-t border-slate-200 bg-white py-8 text-center text-sm text-slate-400">
-        Netherlands Guide 🇳🇱 · Plan smarter, travel better
+        Netherway 🇳🇱 · Plan smarter, travel better
       </footer>
     </main>
   );

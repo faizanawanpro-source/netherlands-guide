@@ -93,7 +93,7 @@ export default function BudgetPlannerPage() {
               href="/dashboard"
               className="font-black text-slate-700"
             >
-              🇳🇱 Netherlands Guide
+              🇳🇱 Netherway
             </Link>
 
             <Link
@@ -138,7 +138,7 @@ export default function BudgetPlannerPage() {
             href="/dashboard"
             className="font-black text-slate-900"
           >
-            🇳🇱 Netherlands Guide
+            🇳🇱 Netherway
           </Link>
 
           <Link
@@ -377,7 +377,7 @@ export default function BudgetPlannerPage() {
 
       {/* FOOTER */}
       <footer className="border-t border-slate-200 bg-white py-8 text-center text-sm text-slate-400">
-        Netherlands Guide 🇳🇱 · Plan smarter, travel better
+        Netherway 🇳🇱 · Plan smarter, travel better
       </footer>
     </main>
   );

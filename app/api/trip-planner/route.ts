@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     // ============================================================
 
     const prompt = `
-You are the AI travel planner for Netherlands Guide.
+You are the AI travel planner for Netherway.
 
 Create a practical travel itinerary for a visitor in the Netherlands.
 

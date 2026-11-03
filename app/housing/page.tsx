@@ -228,7 +228,7 @@ export default function HousingPage() {
             </div>
 
             <div className="hidden sm:block">
-              <p className="font-bold">Netherlands Guide</p>
+              <p className="font-bold">Netherway</p>
               <p className="text-xs text-slate-500">
                 Your guide to life in the Netherlands
               </p>
@@ -806,7 +806,7 @@ export default function HousingPage() {
         </div>
 
         <footer className="py-10 text-center text-sm text-slate-400">
-          Netherlands Guide 🇳🇱 · Making life in the Netherlands easier
+          Netherway 🇳🇱 · Making life in the Netherlands easier
         </footer>
       </div>
     </main>

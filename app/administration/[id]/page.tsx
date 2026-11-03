@@ -744,7 +744,7 @@ export default function AdministrationDocumentPage() {
           <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-wider text-purple-600">
-                Netherlands Guide AI
+                Netherway AI
               </p>
 
               <h2 className="mt-1 text-2xl font-bold">

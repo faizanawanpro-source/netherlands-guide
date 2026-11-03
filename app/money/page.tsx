@@ -131,7 +131,7 @@ export default function MoneyPage() {
 
             <div className="hidden sm:block">
               <p className="font-bold">
-                Netherlands Guide
+                Netherway
               </p>
 
               <p className="text-xs text-slate-500">
@@ -1174,7 +1174,7 @@ export default function MoneyPage() {
         </div>
 
         <footer className="py-10 text-center text-sm text-slate-400">
-          Netherlands Guide 🇳🇱 · Making money and benefits easier to understand
+          Netherway 🇳🇱 · Making money and benefits easier to understand
         </footer>
 
       </div>

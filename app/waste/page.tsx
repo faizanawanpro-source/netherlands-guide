@@ -625,7 +625,7 @@ export default function WastePage() {
                 </h2>
 
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-indigo-800">
-                  Ask the Netherlands Guide AI what to do with a
+                  Ask the Netherway AI what to do with a
                   specific item or situation.
                 </p>
 
@@ -655,7 +655,7 @@ export default function WastePage() {
         </div>
 
         <footer className="py-10 text-center text-sm text-slate-400">
-          Netherlands Guide · Making waste & recycling easier
+          Netherway · Making waste & recycling easier
         </footer>
 
       </div>

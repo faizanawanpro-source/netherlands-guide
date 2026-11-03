@@ -147,7 +147,7 @@ export default function MunicipalityPage() {
         {/* INTRO */}
         <section className="mb-8">
           <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-blue-600">
-            Netherlands Guide
+            Netherway
           </p>
 
           <h1 className="text-4xl font-bold tracking-tight">
