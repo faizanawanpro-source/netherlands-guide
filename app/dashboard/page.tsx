@@ -65,6 +65,13 @@ type Tool = {
 const tools: Record<ProfileType, Tool[]> = {
   refugee: [
     {
+      href: "/housing",
+      icon: "🏠",
+      key: "housing",
+      color: "from-orange-950 via-amber-900 to-orange-950",
+      iconBg: "bg-orange-400/15 ring-orange-300/20",
+    },
+    {
       href: "/dutch-phone-number",
       icon: "📱",
       key: "phone",
